@@ -783,6 +783,93 @@ func TestReconcile_FirstTimeScoring(t *testing.T) {
 	}
 }
 
+// --- DryRun tests ---
+
+func TestReconcile_DryRun_SkipsScorePatch(t *testing.T) {
+	handle := newTestHandle("dry-score", withScore(50.0),
+		withCachedPlacements(placement.Placement{ClusterName: "ocpv05"}))
+	scorer := &mockScorer{
+		response: &scheduler.EvaluateResponse{
+			Ranked: []scheduler.ScoredCandidate{
+				{ClusterName: "ocpv05", Score: 82.5, Eligible: true},
+			},
+		},
+	}
+	resolver := &mockResolver{
+		placements: []placement.Placement{{ClusterName: "ocpv05"}},
+	}
+	cfg := testConfig()
+	cfg.DryRun = true
+	r := newFakeReconciler(scorer, resolver, handle)
+	r.Config = cfg
+
+	result, err := r.Reconcile(context.Background(), reconcileRequest("dry-score"))
+
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v, want nil", err)
+	}
+	if result.Requeue || result.RequeueAfter != 0 {
+		t.Errorf("Reconcile() result = %+v, want no requeue", result)
+	}
+
+	// Verify the scorer was called (dry-run still evaluates).
+	if !scorer.called {
+		t.Error("Scorer was not called in dry-run mode (should still evaluate)")
+	}
+
+	// Verify score was NOT patched.
+	var updated unstructured.Unstructured
+	updated.SetGroupVersionKind(placement.ResourceHandleGVK)
+	if err := r.Get(context.Background(), reconcileRequest("dry-score").NamespacedName, &updated); err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	score, _ := placement.GetCurrentScore(&updated)
+	if score != 50.0 {
+		t.Errorf("score = %v, want 50.0 (unchanged in dry-run)", score)
+	}
+
+	// Verify sync.Map was NOT updated.
+	if _, ok := r.LastWrittenScores.Load("poolboy/dry-score"); ok {
+		t.Error("LastWrittenScores should not be set in dry-run mode")
+	}
+}
+
+func TestReconcile_DryRun_SkipsStatusPatch(t *testing.T) {
+	handle := newTestHandle("dry-status")
+	scorer := &mockScorer{
+		response: &scheduler.EvaluateResponse{
+			Ranked: []scheduler.ScoredCandidate{
+				{ClusterName: "ocpv05", Score: 75.0, Eligible: true},
+			},
+		},
+	}
+	resolver := &mockResolver{
+		placements: []placement.Placement{
+			{ClusterName: "ocpv05", Name: "abc12-uuid", Namespace: "sandbox-abc12"},
+		},
+	}
+	cfg := testConfig()
+	cfg.DryRun = true
+	r := newFakeReconciler(scorer, resolver, handle)
+	r.Config = cfg
+
+	_, err := r.Reconcile(context.Background(), reconcileRequest("dry-status"))
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v, want nil", err)
+	}
+
+	// Verify status.placements was NOT written.
+	var updated unstructured.Unstructured
+	updated.SetGroupVersionKind(placement.ResourceHandleGVK)
+	if err := r.Get(context.Background(), reconcileRequest("dry-status").NamespacedName, &updated); err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	cached, found := placement.GetPlacementsFromStatus(&updated)
+	if found {
+		t.Errorf("status.placements found in dry-run mode (should not be written), got %v", cached)
+	}
+}
+
 // --- SetupWithManager test ---
 
 func TestSetupWithManager_GVK(t *testing.T) {

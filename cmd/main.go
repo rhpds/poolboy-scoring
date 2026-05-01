@@ -46,6 +46,7 @@ func run(ctx context.Context, cfg *config.Config, restCfg *rest.Config) error {
 		"retryInterval", cfg.RetryInterval,
 		"leaderElection", cfg.LeaderElection,
 		"metricsBindAddress", cfg.MetricsBindAddress,
+		"dryRun", cfg.DryRun,
 		"debug", cfg.Debug,
 	)
 

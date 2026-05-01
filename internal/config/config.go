@@ -37,6 +37,9 @@ type Config struct {
 	MetricsUsername    string `envconfig:"METRICS_USERNAME" default:"metrics"`
 	MetricsPassword    string `envconfig:"METRICS_PASSWORD" required:"true"`
 
+	// Operation mode
+	DryRun bool `envconfig:"DRY_RUN" default:"false"`
+
 	// Logging
 	Debug bool `envconfig:"DEBUG" default:"false"`
 }

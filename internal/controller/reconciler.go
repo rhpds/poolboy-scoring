@@ -82,7 +82,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	if cached, _ := placement.GetPlacementsFromStatus(&handle); len(cached) == 0 {
-		if err := r.patchStatusPlacements(ctx, &handle, placements); err != nil {
+		if r.Config.DryRun {
+			log.Info("[DRY-RUN] Would cache placements",
+				"handle", req.Name, "namespace", req.Namespace,
+				"cluster", placements[0].ClusterName)
+		} else if err := r.patchStatusPlacements(ctx, &handle, placements); err != nil {
 			result = "error"
 			if apierrors.IsConflict(err) {
 				log.Info("Conflict caching placements, will retry",
@@ -112,6 +116,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	currentScore, _ := placement.GetCurrentScore(&handle)
 	if newScore == currentScore {
+		return ctrl.Result{}, nil
+	}
+
+	if r.Config.DryRun {
+		log.Info("[DRY-RUN] Would update preference score",
+			"handle", req.Name, "namespace", req.Namespace,
+			"oldScore", currentScore,
+			"newScore", newScore,
+		)
 		return ctrl.Result{}, nil
 	}
 

@@ -62,6 +62,9 @@ func TestLoad_AllDefaults(t *testing.T) {
 	if cfg.MetricsUsername != "metrics" {
 		t.Errorf("MetricsUsername = %q, want %q", cfg.MetricsUsername, "metrics")
 	}
+	if cfg.DryRun != false {
+		t.Errorf("DryRun = %v, want false", cfg.DryRun)
+	}
 	if cfg.Debug != false {
 		t.Errorf("Debug = %v, want false", cfg.Debug)
 	}
@@ -109,6 +112,7 @@ func TestLoad_CustomValues(t *testing.T) {
 	t.Setenv("LEADER_ELECTION_ID", "custom-id")
 	t.Setenv("METRICS_BIND_ADDRESS", ":9090")
 	t.Setenv("METRICS_USERNAME", "admin")
+	t.Setenv("DRY_RUN", "true")
 	t.Setenv("DEBUG", "true")
 
 	cfg, err := Load()
@@ -139,6 +143,9 @@ func TestLoad_CustomValues(t *testing.T) {
 	}
 	if cfg.MetricsUsername != "admin" {
 		t.Errorf("MetricsUsername = %q, want %q", cfg.MetricsUsername, "admin")
+	}
+	if cfg.DryRun != true {
+		t.Errorf("DryRun = %v, want true", cfg.DryRun)
 	}
 	if cfg.Debug != true {
 		t.Errorf("Debug = %v, want true", cfg.Debug)
