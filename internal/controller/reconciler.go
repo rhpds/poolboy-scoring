@@ -148,6 +148,10 @@ func (r *ResourcePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		candidates[i] = scheduler.Candidate{ClusterName: c}
 	}
 
+	log.V(1).Info("Calling /evaluate",
+		"pool", req.Name, "namespace", req.Namespace,
+		"clusters", uniqueClusters)
+
 	evalStart := time.Now()
 	resp, err := r.Scorer.Evaluate(ctx, candidates)
 	ObserveSchedulerDuration(evalStart, domain)
