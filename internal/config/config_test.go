@@ -15,7 +15,6 @@ func setRequiredEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("CLUSTER_SCHEDULER_URL", "http://scheduler:8080")
 	t.Setenv("CLUSTER_SCHEDULER_API_KEY", "test-api-key")
-	t.Setenv("CLUSTER_DOMAIN", "test.example.com")
 	t.Setenv("METRICS_PASSWORD", "test-password")
 }
 
@@ -34,14 +33,14 @@ func TestLoad_AllDefaults(t *testing.T) {
 	if cfg.ClusterSchedulerAPIKey != "test-api-key" {
 		t.Errorf("ClusterSchedulerAPIKey = %q, want %q", cfg.ClusterSchedulerAPIKey, "test-api-key")
 	}
-	if cfg.ClusterDomain != "test.example.com" {
-		t.Errorf("ClusterDomain = %q, want %q", cfg.ClusterDomain, "test.example.com")
-	}
 	if cfg.MetricsPassword != "test-password" {
 		t.Errorf("MetricsPassword = %q, want %q", cfg.MetricsPassword, "test-password")
 	}
 
 	// Verify defaults
+	if cfg.ClusterDomain != "babydev.dev.open.redhat.com" {
+		t.Errorf("ClusterDomain = %q, want %q", cfg.ClusterDomain, "babydev.dev.open.redhat.com")
+	}
 	if cfg.ResyncInterval != "5m" {
 		t.Errorf("ResyncInterval = %q, want %q", cfg.ResyncInterval, "5m")
 	}
@@ -78,7 +77,6 @@ func TestLoad_MissingRequired(t *testing.T) {
 	}{
 		{"missing CLUSTER_SCHEDULER_URL", "CLUSTER_SCHEDULER_URL"},
 		{"missing CLUSTER_SCHEDULER_API_KEY", "CLUSTER_SCHEDULER_API_KEY"},
-		{"missing CLUSTER_DOMAIN", "CLUSTER_DOMAIN"},
 		{"missing METRICS_PASSWORD", "METRICS_PASSWORD"},
 	}
 
@@ -100,6 +98,7 @@ func TestLoad_CustomValues(t *testing.T) {
 	setRequiredEnv(t)
 
 	// Override all defaults
+	t.Setenv("CLUSTER_DOMAIN", "prod.example.com")
 	t.Setenv("RESYNC_INTERVAL", "10m")
 	t.Setenv("SCORE_TIMEOUT", "3s")
 	t.Setenv("LEADER_ELECTION", "false")
@@ -113,6 +112,9 @@ func TestLoad_CustomValues(t *testing.T) {
 		t.Fatalf("Load() returned unexpected error: %v", err)
 	}
 
+	if cfg.ClusterDomain != "prod.example.com" {
+		t.Errorf("ClusterDomain = %q, want %q", cfg.ClusterDomain, "prod.example.com")
+	}
 	if cfg.ResyncInterval != "10m" {
 		t.Errorf("ResyncInterval = %q, want %q", cfg.ResyncInterval, "10m")
 	}

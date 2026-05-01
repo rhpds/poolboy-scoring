@@ -20,7 +20,7 @@ type Config struct {
 	ClusterSchedulerAPIKey string `envconfig:"CLUSTER_SCHEDULER_API_KEY" required:"true"`
 
 	// Cluster identity (used as Prometheus metric label)
-	ClusterDomain string `envconfig:"CLUSTER_DOMAIN" required:"true"`
+	ClusterDomain string `envconfig:"CLUSTER_DOMAIN" default:"babydev.dev.open.redhat.com"`
 
 	// Timing
 	ResyncInterval string `envconfig:"RESYNC_INTERVAL" default:"5m"`
