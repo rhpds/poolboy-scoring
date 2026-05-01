@@ -31,21 +31,38 @@ func NewLookup(reader client.Reader) *PlacementLookup {
 // Returns all successfully resolved placements. A handle with resources on
 // multiple clusters returns multiple placements so each cluster gets scored.
 func (p *PlacementLookup) Lookup(ctx context.Context, handle *unstructured.Unstructured) ([]Placement, error) {
-	if placements, found := GetPlacementsFromStatus(handle); found {
-		return placements, nil
+	status, err := ParseHandleStatus(handle)
+	if err != nil {
+		return nil, err
 	}
 
-	if placement, found := GetPlacementFromProvisionData(handle); found {
-		return []Placement{*placement}, nil
+	if status != nil {
+		// Tier 1: cached placements
+		if valid := validPlacements(status.Placements); len(valid) > 0 {
+			return valid, nil
+		}
+
+		// Tier 2: provision_data shortcut
+		if status.Summary != nil {
+			if pl, found := PlacementFromProvisionData(status.Summary); found {
+				return []Placement{*pl}, nil
+			}
+		}
 	}
 
-	return p.resolveFromAnarchySubjects(ctx, handle)
+	// Tier 3: AnarchySubject GET
+	return p.resolveFromAnarchySubjects(ctx, handle, status)
 }
 
 // resolveFromAnarchySubjects fetches all referenced AnarchySubjects and
 // extracts placement from each. Returns all successful extractions.
-func (p *PlacementLookup) resolveFromAnarchySubjects(ctx context.Context, handle *unstructured.Unstructured) ([]Placement, error) {
-	refs, err := GetAnarchySubjectRefs(handle)
+func (p *PlacementLookup) resolveFromAnarchySubjects(ctx context.Context, handle *unstructured.Unstructured, status *ResourceHandleStatus) ([]Placement, error) {
+	var resources []HandleResource
+	if status != nil {
+		resources = status.Resources
+	}
+
+	refs, err := AnarchySubjectRefsFromResources(resources)
 	if err != nil {
 		return nil, fmt.Errorf("handle %s/%s: %w", handle.GetNamespace(), handle.GetName(), err)
 	}
@@ -67,7 +84,12 @@ func (p *PlacementLookup) resolveFromAnarchySubjects(ctx context.Context, handle
 			continue
 		}
 
-		placement, err := ExtractPlacement(&subject)
+		spec, err := ParseAnarchySubjectSpec(&subject)
+		if err != nil {
+			continue
+		}
+
+		placement, err := ExtractPlacement(spec, subject.GetName())
 		if err != nil {
 			continue
 		}
@@ -79,11 +101,19 @@ func (p *PlacementLookup) resolveFromAnarchySubjects(ctx context.Context, handle
 		if lastErr != nil {
 			return nil, lastErr
 		}
-		// All AnarchySubjects were fetched successfully but none had
-		// sandbox_openshift_cluster — this is a non-CNV workload.
-		// Return empty slice so the reconciler skips it silently.
 		return nil, nil
 	}
 
 	return placements, nil
+}
+
+// validPlacements filters placements with non-empty ClusterName.
+func validPlacements(placements []Placement) []Placement {
+	var valid []Placement
+	for _, p := range placements {
+		if p.ClusterName != "" {
+			valid = append(valid, p)
+		}
+	}
+	return valid
 }

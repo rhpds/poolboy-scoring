@@ -4,28 +4,39 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// ExtractPlacement reads sandbox_openshift_* fields from an AnarchySubject's
-// spec.vars.job_vars. Returns an error if sandbox_openshift_cluster is missing,
-// which signals to the caller that this is not a CNV workload and should be
-// skipped (e.g. an AWS sandbox or RHEL VM).
-//
-// sandbox_openshift_name and sandbox_openshift_namespace are optional — tenant
-// clusters (e.g. cluster-nm66z) may have empty values for these fields.
-func ExtractPlacement(obj *unstructured.Unstructured) (*Placement, error) {
-	jobVars, found, _ := unstructured.NestedMap(obj.Object, "spec", "vars", "job_vars")
+// ParseAnarchySubjectSpec converts the spec section of an AnarchySubject into
+// a typed struct. Returns a zero-value spec (not nil) if the field is missing.
+func ParseAnarchySubjectSpec(obj *unstructured.Unstructured) (*AnarchySubjectSpec, error) {
+	raw, found, _ := unstructured.NestedMap(obj.Object, "spec")
 	if !found {
-		return nil, fmt.Errorf("spec.vars.job_vars not found in AnarchySubject %s", obj.GetName())
+		return &AnarchySubjectSpec{}, nil
 	}
+	var spec AnarchySubjectSpec
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &spec); err != nil {
+		return nil, err
+	}
+	return &spec, nil
+}
+
+// ExtractPlacement reads sandbox_openshift_* fields from a parsed
+// AnarchySubjectSpec's job_vars. Returns an error if sandbox_openshift_cluster
+// is missing, which signals that this is not a CNV workload.
+func ExtractPlacement(spec *AnarchySubjectSpec, subjectName string) (*Placement, error) {
+	if spec == nil || spec.Vars == nil || spec.Vars.JobVars == nil {
+		return nil, fmt.Errorf("spec.vars.job_vars not found in AnarchySubject %s", subjectName)
+	}
+	jobVars := spec.Vars.JobVars
 
 	clusterRaw, ok := jobVars["sandbox_openshift_cluster"]
 	if !ok {
-		return nil, fmt.Errorf("sandbox_openshift_cluster not found in job_vars of AnarchySubject %s", obj.GetName())
+		return nil, fmt.Errorf("sandbox_openshift_cluster not found in job_vars of AnarchySubject %s", subjectName)
 	}
 	clusterName, ok := clusterRaw.(string)
 	if !ok || clusterName == "" {
-		return nil, fmt.Errorf("sandbox_openshift_cluster is empty in AnarchySubject %s", obj.GetName())
+		return nil, fmt.Errorf("sandbox_openshift_cluster is empty in AnarchySubject %s", subjectName)
 	}
 
 	var name, namespace string

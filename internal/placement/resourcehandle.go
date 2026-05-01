@@ -4,52 +4,46 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// IsHandleBound returns true if the ResourceHandle has a spec.resourceClaim,
-// meaning it is already bound to a claim and should not be scored.
-func IsHandleBound(obj *unstructured.Unstructured) bool {
-	_, found, _ := unstructured.NestedMap(obj.Object, "spec", "resourceClaim")
-	return found
+// ParseHandleSpec converts the spec section of a ResourceHandle into a typed
+// struct. Returns a zero-value spec (not nil) if the field is missing.
+func ParseHandleSpec(obj *unstructured.Unstructured) (*ResourceHandleSpec, error) {
+	raw, found, _ := unstructured.NestedMap(obj.Object, "spec")
+	if !found {
+		return &ResourceHandleSpec{}, nil
+	}
+	var spec ResourceHandleSpec
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &spec); err != nil {
+		return nil, err
+	}
+	return &spec, nil
 }
 
-// GetPlacementFromStatus reads status.placement from a ResourceHandle.
-// This is the cached placement written by our controller after the first
-// resolution. Returns (placement, true) if present, (nil, false) otherwise.
-func GetPlacementFromStatus(obj *unstructured.Unstructured) (*Placement, bool) {
-	p, found, _ := unstructured.NestedMap(obj.Object, "status", "placement")
-	if !found || len(p) == 0 {
-		return nil, false
+// ParseHandleStatus converts the status section of a ResourceHandle into a
+// typed struct. Returns (nil, nil) if the handle has no status.
+func ParseHandleStatus(obj *unstructured.Unstructured) (*ResourceHandleStatus, error) {
+	raw, found, _ := unstructured.NestedMap(obj.Object, "status")
+	if !found {
+		return nil, nil
 	}
-
-	clusterName, _, _ := unstructured.NestedString(obj.Object, "status", "placement", "clusterName")
-	if clusterName == "" {
-		return nil, false
+	var status ResourceHandleStatus
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &status); err != nil {
+		return nil, err
 	}
-
-	name, _, _ := unstructured.NestedString(obj.Object, "status", "placement", "name")
-	namespace, _, _ := unstructured.NestedString(obj.Object, "status", "placement", "namespace")
-
-	return &Placement{
-		ClusterName: clusterName,
-		Name:        name,
-		Namespace:   namespace,
-	}, true
+	return &status, nil
 }
 
-// GetPlacementFromProvisionData reads status.summary.provision_data to extract
-// placement fields directly from the ResourceHandle. Some catalog items
-// propagate sandbox_openshift_cluster into provision_data, saving an
-// AnarchySubject API call.
-// Returns (placement, true) if sandbox_openshift_cluster is present,
-// (nil, false) otherwise.
-func GetPlacementFromProvisionData(obj *unstructured.Unstructured) (*Placement, bool) {
-	pd, found, _ := unstructured.NestedMap(obj.Object, "status", "summary", "provision_data")
-	if !found || len(pd) == 0 {
+// PlacementFromProvisionData extracts placement fields from a HandleSummary's
+// provision_data. Some catalog items propagate sandbox_openshift_cluster into
+// provision_data, saving an AnarchySubject API call.
+func PlacementFromProvisionData(summary *HandleSummary) (*Placement, bool) {
+	if summary == nil || len(summary.ProvisionData) == 0 {
 		return nil, false
 	}
 
-	clusterRaw, ok := pd["sandbox_openshift_cluster"]
+	clusterRaw, ok := summary.ProvisionData["sandbox_openshift_cluster"]
 	if !ok {
 		return nil, false
 	}
@@ -59,10 +53,10 @@ func GetPlacementFromProvisionData(obj *unstructured.Unstructured) (*Placement, 
 	}
 
 	var name, namespace string
-	if v, ok := pd["sandbox_openshift_name"].(string); ok {
+	if v, ok := summary.ProvisionData["sandbox_openshift_name"].(string); ok {
 		name = v
 	}
-	if v, ok := pd["sandbox_openshift_namespace"].(string); ok {
+	if v, ok := summary.ProvisionData["sandbox_openshift_namespace"].(string); ok {
 		namespace = v
 	}
 
@@ -73,109 +67,31 @@ func GetPlacementFromProvisionData(obj *unstructured.Unstructured) (*Placement, 
 	}, true
 }
 
-// GetAnarchySubjectRefs returns all AnarchySubject references from
-// status.resources[]. A handle can have multiple resources (e.g. an AWS
-// sandbox at index 0 and a CNV workload at index 1), and the one with
-// sandbox_openshift_cluster may not be at index 0. Only entries matching
-// the AnarchySubject apiVersion and kind are returned.
-func GetAnarchySubjectRefs(obj *unstructured.Unstructured) ([]ResourceRef, error) {
-	resources, found, _ := unstructured.NestedSlice(obj.Object, "status", "resources")
-	if !found || len(resources) == 0 {
+// AnarchySubjectRefsFromResources filters HandleResource entries for
+// AnarchySubject references. Only entries with the correct apiVersion/kind
+// and a non-empty name are returned.
+func AnarchySubjectRefsFromResources(resources []HandleResource) ([]ResourceRef, error) {
+	if len(resources) == 0 {
 		return nil, fmt.Errorf("no status.resources found")
 	}
 
 	var refs []ResourceRef
 	for _, r := range resources {
-		res, ok := r.(map[string]interface{})
-		if !ok {
+		if r.Reference == nil {
 			continue
 		}
-		refRaw, ok := res["reference"]
-		if !ok {
+		ref := r.Reference
+		if ref.APIVersion != "anarchy.gpte.redhat.com/v1" || ref.Kind != "AnarchySubject" {
 			continue
 		}
-		ref, ok := refRaw.(map[string]interface{})
-		if !ok {
+		if ref.Name == "" {
 			continue
 		}
-
-		apiVersion, _ := ref["apiVersion"].(string)
-		kind, _ := ref["kind"].(string)
-		if apiVersion != "anarchy.gpte.redhat.com/v1" || kind != "AnarchySubject" {
-			continue
-		}
-
-		name, _ := ref["name"].(string)
-		if name == "" {
-			continue
-		}
-
-		namespace, _ := ref["namespace"].(string)
-
-		refs = append(refs, ResourceRef{
-			APIVersion: apiVersion,
-			Kind:       kind,
-			Name:       name,
-			Namespace:  namespace,
-		})
+		refs = append(refs, *ref)
 	}
 
 	if len(refs) == 0 {
 		return nil, fmt.Errorf("no AnarchySubject references found in status.resources")
 	}
 	return refs, nil
-}
-
-// GetPlacementsFromStatus reads status.placements (array) from a ResourceHandle.
-// This is the cached version written by the reconciler after resolving all
-// AnarchySubject refs. Returns (placements, true) if at least one entry exists.
-func GetPlacementsFromStatus(obj *unstructured.Unstructured) ([]Placement, bool) {
-	raw, found, _ := unstructured.NestedSlice(obj.Object, "status", "placements")
-	if !found || len(raw) == 0 {
-		return nil, false
-	}
-
-	var placements []Placement
-	for _, item := range raw {
-		m, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		clusterName, _ := m["clusterName"].(string)
-		if clusterName == "" {
-			continue
-		}
-		name, _ := m["name"].(string)
-		namespace, _ := m["namespace"].(string)
-		placements = append(placements, Placement{
-			ClusterName: clusterName,
-			Name:        name,
-			Namespace:   namespace,
-		})
-	}
-
-	if len(placements) == 0 {
-		return nil, false
-	}
-	return placements, true
-}
-
-// GetCurrentScore reads spec.preferenceScore from a ResourceHandle.
-// Returns (score, true) if present, (0, false) if the field is not set.
-//
-// Handles both float64 and int64 values because Kubernetes' unstructured
-// converter stores round numbers (like 50.0) as int64 internally.
-func GetCurrentScore(obj *unstructured.Unstructured) (float64, bool) {
-	val, found, err := unstructured.NestedFieldNoCopy(obj.Object, "spec", "preferenceScore")
-	if !found || err != nil {
-		return 0, false
-	}
-	switch v := val.(type) {
-	case float64:
-		return v, true
-	case int64:
-		return float64(v), true
-	default:
-		return 0, false
-	}
 }

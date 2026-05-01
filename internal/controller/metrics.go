@@ -7,11 +7,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
-// ReconcileTotal counts reconciliations by outcome.
-//
-// Labels:
-//   - cluster_domain: Babylon cluster FQDN (static, from config)
-//   - result: "success", "error", or "skipped"
+// ReconcileTotal counts pool reconciliations by outcome.
 var ReconcileTotal = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "poolboy_scoring_reconcile_total",
@@ -21,10 +17,6 @@ var ReconcileTotal = prometheus.NewCounterVec(
 )
 
 // ScorePatchesTotal counts score patches applied to ResourceHandles.
-//
-// Labels:
-//   - cluster_domain: Babylon cluster FQDN (static, from config)
-//   - cluster: target ocpvXX cluster name (bounded, ~7 values)
 var ScorePatchesTotal = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "poolboy_scoring_score_patches_total",
@@ -34,11 +26,7 @@ var ScorePatchesTotal = prometheus.NewCounterVec(
 )
 
 // SchedulerDuration measures time spent calling the cluster-scheduler
-// /evaluate endpoint. Uses default Prometheus buckets which cover the
-// range from 5ms to 10s — appropriate for HTTP calls with a 5s timeout.
-//
-// Labels:
-//   - cluster_domain: Babylon cluster FQDN (static, from config)
+// /evaluate endpoint.
 var SchedulerDuration = prometheus.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Name:    "poolboy_scoring_scheduler_duration_seconds",
@@ -48,16 +36,12 @@ var SchedulerDuration = prometheus.NewHistogramVec(
 	[]string{"cluster_domain"},
 )
 
-// HandlesTracked reports how many ResourceHandles have a tracked score
-// in the reconciler's LastWrittenScores map. This represents handles that
-// have been scored at least once since the controller started.
-//
-// Labels:
-//   - cluster_domain: Babylon cluster FQDN (static, from config)
-var HandlesTracked = prometheus.NewGaugeVec(
+// HandlesScored reports how many ResourceHandles were scored in the
+// most recent reconciliation cycle across all pools.
+var HandlesScored = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
-		Name: "poolboy_scoring_handles_tracked",
-		Help: "Number of ResourceHandles with a tracked score",
+		Name: "poolboy_scoring_handles_scored",
+		Help: "Number of ResourceHandles scored in the last reconciliation",
 	},
 	[]string{"cluster_domain"},
 )
@@ -67,7 +51,7 @@ func init() {
 		ReconcileTotal,
 		ScorePatchesTotal,
 		SchedulerDuration,
-		HandlesTracked,
+		HandlesScored,
 	)
 }
 

@@ -6,29 +6,83 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func TestExtractPlacement(t *testing.T) {
+func TestParseAnarchySubjectSpec(t *testing.T) {
 	tests := []struct {
-		name    string
-		obj     *unstructured.Unstructured
-		want    *Placement
-		wantErr bool
+		name       string
+		obj        *unstructured.Unstructured
+		wantVars   bool
+		wantJobVar string
 	}{
 		{
-			name: "all three fields present (ocpvXX pattern)",
+			name: "full spec with job_vars",
 			obj: &unstructured.Unstructured{Object: map[string]interface{}{
-				"metadata": map[string]interface{}{
-					"name": "enterprise.aap-prod-2gdtf-1",
-				},
 				"spec": map[string]interface{}{
 					"vars": map[string]interface{}{
 						"job_vars": map[string]interface{}{
-							"sandbox_openshift_cluster":   "ocpv06",
-							"sandbox_openshift_name":      "2gdtf-1-f5da0b1e-abf4-5265-b9de-9e801f5b31af",
-							"sandbox_openshift_namespace": "sandbox-2gdtf-1-ocp4-cluster",
+							"sandbox_openshift_cluster": "ocpv06",
 						},
 					},
 				},
 			}},
+			wantVars:   true,
+			wantJobVar: "ocpv06",
+		},
+		{
+			name: "spec without vars",
+			obj: &unstructured.Unstructured{Object: map[string]interface{}{
+				"spec": map[string]interface{}{
+					"governor": "some-governor",
+				},
+			}},
+			wantVars: false,
+		},
+		{
+			name: "no spec",
+			obj:  &unstructured.Unstructured{Object: map[string]interface{}{}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec, err := ParseAnarchySubjectSpec(tt.obj)
+			if err != nil {
+				t.Fatalf("ParseAnarchySubjectSpec() error = %v", err)
+			}
+			if spec == nil {
+				t.Fatal("ParseAnarchySubjectSpec() returned nil")
+			}
+			if tt.wantVars {
+				if spec.Vars == nil || spec.Vars.JobVars == nil {
+					t.Fatal("expected Vars.JobVars to be set")
+				}
+				if got := spec.Vars.JobVars["sandbox_openshift_cluster"]; got != tt.wantJobVar {
+					t.Errorf("sandbox_openshift_cluster = %v, want %v", got, tt.wantJobVar)
+				}
+			}
+		})
+	}
+}
+
+func TestExtractPlacement(t *testing.T) {
+	tests := []struct {
+		name        string
+		spec        *AnarchySubjectSpec
+		subjectName string
+		want        *Placement
+		wantErr     bool
+	}{
+		{
+			name: "all three fields present (ocpvXX pattern)",
+			spec: &AnarchySubjectSpec{
+				Vars: &AnarchySubjectVars{
+					JobVars: map[string]interface{}{
+						"sandbox_openshift_cluster":   "ocpv06",
+						"sandbox_openshift_name":      "2gdtf-1-f5da0b1e-abf4-5265-b9de-9e801f5b31af",
+						"sandbox_openshift_namespace": "sandbox-2gdtf-1-ocp4-cluster",
+					},
+				},
+			},
+			subjectName: "enterprise.aap-prod-2gdtf-1",
 			want: &Placement{
 				ClusterName: "ocpv06",
 				Name:        "2gdtf-1-f5da0b1e-abf4-5265-b9de-9e801f5b31af",
@@ -37,85 +91,67 @@ func TestExtractPlacement(t *testing.T) {
 		},
 		{
 			name: "tenant cluster — cluster only, no namespace",
-			obj: &unstructured.Unstructured{Object: map[string]interface{}{
-				"metadata": map[string]interface{}{
-					"name": "ai-qs-data-gov-tenant-c8z5s",
-				},
-				"spec": map[string]interface{}{
-					"vars": map[string]interface{}{
-						"job_vars": map[string]interface{}{
-							"sandbox_openshift_cluster": "cluster-nm66z",
-						},
+			spec: &AnarchySubjectSpec{
+				Vars: &AnarchySubjectVars{
+					JobVars: map[string]interface{}{
+						"sandbox_openshift_cluster": "cluster-nm66z",
 					},
 				},
-			}},
+			},
+			subjectName: "ai-qs-data-gov-tenant-c8z5s",
 			want: &Placement{
 				ClusterName: "cluster-nm66z",
 			},
 		},
 		{
 			name: "missing sandbox_openshift_cluster (non-CNV workload)",
-			obj: &unstructured.Unstructured{Object: map[string]interface{}{
-				"metadata": map[string]interface{}{
-					"name": "agd-v2.openshift-ai-v3-aws-vzrjg",
-				},
-				"spec": map[string]interface{}{
-					"vars": map[string]interface{}{
-						"job_vars": map[string]interface{}{
-							"aws_region":     "us-east-2",
-							"cloud_provider": "aws",
-							"guid":           "vzrjg",
-						},
+			spec: &AnarchySubjectSpec{
+				Vars: &AnarchySubjectVars{
+					JobVars: map[string]interface{}{
+						"aws_region":     "us-east-2",
+						"cloud_provider": "aws",
+						"guid":           "vzrjg",
 					},
 				},
-			}},
-			wantErr: true,
+			},
+			subjectName: "agd-v2.openshift-ai-v3-aws-vzrjg",
+			wantErr:     true,
 		},
 		{
 			name: "empty job_vars map",
-			obj: &unstructured.Unstructured{Object: map[string]interface{}{
-				"metadata": map[string]interface{}{
-					"name": "some-subject",
+			spec: &AnarchySubjectSpec{
+				Vars: &AnarchySubjectVars{
+					JobVars: map[string]interface{}{},
 				},
-				"spec": map[string]interface{}{
-					"vars": map[string]interface{}{
-						"job_vars": map[string]interface{}{},
-					},
-				},
-			}},
-			wantErr: true,
+			},
+			subjectName: "some-subject",
+			wantErr:     true,
 		},
 		{
 			name: "missing job_vars entirely",
-			obj: &unstructured.Unstructured{Object: map[string]interface{}{
-				"metadata": map[string]interface{}{
-					"name": "some-subject",
-				},
-				"spec": map[string]interface{}{
-					"vars": map[string]interface{}{
-						"current_state": "started",
-					},
-				},
-			}},
-			wantErr: true,
+			spec: &AnarchySubjectSpec{
+				Vars: &AnarchySubjectVars{},
+			},
+			subjectName: "some-subject",
+			wantErr:     true,
 		},
 		{
 			name: "missing spec.vars entirely",
-			obj: &unstructured.Unstructured{Object: map[string]interface{}{
-				"metadata": map[string]interface{}{
-					"name": "some-subject",
-				},
-				"spec": map[string]interface{}{
-					"governor": "some-governor",
-				},
-			}},
-			wantErr: true,
+			spec: &AnarchySubjectSpec{},
+			subjectName: "some-subject",
+			wantErr:     true,
+		},
+		{
+			name:        "nil spec",
+			spec:        nil,
+			subjectName: "some-subject",
+			wantErr:     true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ExtractPlacement(tt.obj)
+			got, err := ExtractPlacement(tt.spec, tt.subjectName)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ExtractPlacement() error = %v, wantErr %v", err, tt.wantErr)
 				return

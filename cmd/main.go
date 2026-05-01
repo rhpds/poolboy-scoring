@@ -73,7 +73,7 @@ func run(ctx context.Context, cfg *config.Config, restCfg *rest.Config) error {
 
 	resolver := placement.NewLookup(mgr.GetClient())
 
-	reconciler := &controller.Reconciler{
+	reconciler := &controller.ResourcePoolReconciler{
 		Client:   mgr.GetClient(),
 		Scorer:   scorer,
 		Resolver: resolver,

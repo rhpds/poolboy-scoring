@@ -88,19 +88,19 @@ func TestSchedulerDurationObserve(t *testing.T) {
 	}
 }
 
-func TestHandlesTrackedRegistered(t *testing.T) {
-	HandlesTracked.WithLabelValues("test.local").Set(42)
+func TestHandlesScoredRegistered(t *testing.T) {
+	HandlesScored.WithLabelValues("test.local").Set(42)
 
 	families, err := metrics.Registry.Gather()
 	if err != nil {
 		t.Fatalf("Gather() error = %v", err)
 	}
 
-	if !findMetricFamily(families, "poolboy_scoring_handles_tracked") {
-		t.Error("poolboy_scoring_handles_tracked not found in registry")
+	if !findMetricFamily(families, "poolboy_scoring_handles_scored") {
+		t.Error("poolboy_scoring_handles_scored not found in registry")
 	}
 
-	gauge, err := HandlesTracked.GetMetricWithLabelValues("test.local")
+	gauge, err := HandlesScored.GetMetricWithLabelValues("test.local")
 	if err != nil {
 		t.Fatalf("failed to get metric: %v", err)
 	}

@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -22,17 +21,20 @@ import (
 )
 
 // PlacementResolver resolves cluster placements for a ResourceHandle.
-// Defined here (at the consumer) rather than in the placement package —
-// this is the Go idiom of "accept interfaces, return structs."
-// placement.PlacementLookup satisfies this interface implicitly.
 type PlacementResolver interface {
 	Lookup(ctx context.Context, handle *unstructured.Unstructured) ([]placement.Placement, error)
 }
 
-// Reconciler watches unbound ResourceHandles, resolves their cluster
-// placement, calls the cluster-scheduler /evaluate endpoint, and patches
-// spec.preferenceScore when the score changes.
-type Reconciler struct {
+// handleWithCluster pairs a resolved handle with its cluster name.
+type handleWithCluster struct {
+	handle      *unstructured.Unstructured
+	clusterName string
+}
+
+// ResourcePoolReconciler watches ResourcePool objects, collects unbound
+// healthy handles, resolves their cluster placements, sends one batch
+// /evaluate call per pool, and patches each handle's spec.preferenceScore.
+type ResourcePoolReconciler struct {
 	client.Client
 	Scorer            scheduler.Scorer
 	Resolver          PlacementResolver
@@ -40,19 +42,16 @@ type Reconciler struct {
 	Config            *config.Config
 }
 
-// Reconcile processes a single ResourceHandle.
-//
-// Flow: get → skip if bound → resolve placement → cache status.placements →
-// evaluate → compare score → patch if changed → track in sync.Map.
-func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+// Reconcile processes a single ResourcePool.
+func (r *ResourcePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 	domain := r.Config.ClusterDomain
 	result := "success"
 	defer func() { ReconcileTotal.WithLabelValues(domain, result).Inc() }()
 
-	var handle unstructured.Unstructured
-	handle.SetGroupVersionKind(placement.ResourceHandleGVK)
-	if err := r.Get(ctx, req.NamespacedName, &handle); err != nil {
+	var pool unstructured.Unstructured
+	pool.SetGroupVersionKind(placement.ResourcePoolGVK)
+	if err := r.Get(ctx, req.NamespacedName, &pool); err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			result = "skipped"
 			return ctrl.Result{}, nil
@@ -61,153 +60,216 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, err
 	}
 
-	if placement.IsHandleBound(&handle) {
-		result = "skipped"
-		return ctrl.Result{}, nil
-	}
-
-	placements, err := r.Resolver.Lookup(ctx, &handle)
+	poolStatus, err := placement.ParsePoolStatus(&pool)
 	if err != nil {
 		result = "error"
-		log.Info("Failed to resolve placement, will retry",
-			"handle", req.Name, "namespace", req.Namespace, "error", err.Error())
-		return ctrl.Result{RequeueAfter: r.Config.RetryIntervalDuration()}, nil
+		return ctrl.Result{}, fmt.Errorf("parsing pool status: %w", err)
 	}
 
-	if len(placements) == 0 {
+	if poolStatus != nil && poolStatus.ResourceHandleCount != nil &&
+		poolStatus.ResourceHandleCount.Available == 0 {
 		result = "skipped"
-		log.V(1).Info("No placements resolved, skipping",
-			"handle", req.Name, "namespace", req.Namespace)
+		log.V(1).Info("No available handles, skipping",
+			"pool", req.Name, "namespace", req.Namespace)
 		return ctrl.Result{}, nil
 	}
 
-	if cached, _ := placement.GetPlacementsFromStatus(&handle); len(cached) == 0 {
-		if r.Config.DryRun {
-			log.Info("[DRY-RUN] Would cache placements",
-				"handle", req.Name, "namespace", req.Namespace,
-				"cluster", placements[0].ClusterName)
-		} else if err := r.patchStatusPlacements(ctx, &handle, placements); err != nil {
-			result = "error"
-			if apierrors.IsConflict(err) {
-				log.Info("Conflict caching placements, will retry",
-					"handle", req.Name, "namespace", req.Namespace)
-				return ctrl.Result{Requeue: true}, nil
-			}
-			return ctrl.Result{}, fmt.Errorf("caching placements for %s/%s: %w", req.Namespace, req.Name, err)
-		}
+	if poolStatus == nil || len(poolStatus.ResourceHandles) == 0 {
+		result = "skipped"
+		log.V(1).Info("No handle entries in pool status, skipping",
+			"pool", req.Name, "namespace", req.Namespace)
+		return ctrl.Result{}, nil
 	}
 
-	candidates := buildCandidates(placements)
+	var resolved []handleWithCluster
+	var placementFailed int
+
+	for _, entry := range poolStatus.ResourceHandles {
+		if entry.Healthy != nil && !*entry.Healthy {
+			log.Info("Skipping unhealthy handle",
+				"pool", req.Name, "handle", entry.Name)
+			continue
+		}
+
+		var handle unstructured.Unstructured
+		handle.SetGroupVersionKind(placement.ResourceHandleGVK)
+		if err := r.Get(ctx, types.NamespacedName{
+			Name:      entry.Name,
+			Namespace: req.Namespace,
+		}, &handle); err != nil {
+			if client.IgnoreNotFound(err) == nil {
+				log.V(1).Info("Handle not found, skipping",
+					"pool", req.Name, "handle", entry.Name)
+				continue
+			}
+			result = "error"
+			return ctrl.Result{}, fmt.Errorf("getting handle %s: %w", entry.Name, err)
+		}
+
+		handleSpec, err := placement.ParseHandleSpec(&handle)
+		if err != nil {
+			result = "error"
+			return ctrl.Result{}, fmt.Errorf("parsing handle spec %s: %w", entry.Name, err)
+		}
+		if handleSpec.ResourceClaim != nil {
+			continue
+		}
+
+		placements, err := r.Resolver.Lookup(ctx, &handle)
+		if err != nil {
+			log.Info("Failed to resolve placement, will retry",
+				"pool", req.Name, "handle", entry.Name, "error", err.Error())
+			placementFailed++
+			continue
+		}
+		if len(placements) == 0 {
+			log.V(1).Info("No placements resolved, skipping handle",
+				"pool", req.Name, "handle", entry.Name)
+			continue
+		}
+
+		resolved = append(resolved, handleWithCluster{
+			handle:      handle.DeepCopy(),
+			clusterName: placements[0].ClusterName,
+		})
+	}
+
+	if len(resolved) == 0 {
+		result = "skipped"
+		if placementFailed > 0 {
+			return ctrl.Result{RequeueAfter: r.Config.RetryIntervalDuration()}, nil
+		}
+		return ctrl.Result{}, nil
+	}
+
+	uniqueClusters := deduplicateClusters(resolved)
+	candidates := make([]scheduler.Candidate, len(uniqueClusters))
+	for i, c := range uniqueClusters {
+		candidates[i] = scheduler.Candidate{ClusterName: c}
+	}
 
 	evalStart := time.Now()
 	resp, err := r.Scorer.Evaluate(ctx, candidates)
 	ObserveSchedulerDuration(evalStart, domain)
 	if err != nil {
 		result = "error"
-		log.Info("Scheduler evaluation failed, keeping existing score",
-			"handle", req.Name, "namespace", req.Namespace, "error", err.Error())
+		log.Info("Scheduler evaluation failed, keeping existing scores",
+			"pool", req.Name, "namespace", req.Namespace, "error", err.Error())
 		return ctrl.Result{RequeueAfter: r.Config.RetryIntervalDuration()}, nil
 	}
 
 	respJSON, _ := json.Marshal(resp)
 	log.V(1).Info("Evaluate response",
-		"handle", req.Name, "namespace", req.Namespace,
-		"ranked", len(resp.Ranked), "excluded", len(resp.Excluded),
-		"strategy", resp.Strategy, "generatedAt", resp.GeneratedAt,
+		"pool", req.Name, "namespace", req.Namespace,
+		"candidates", len(candidates), "ranked", len(resp.Ranked),
+		"excluded", len(resp.Excluded), "strategy", resp.Strategy,
 		"response", json.RawMessage(respJSON),
 	)
 
-	// Use the highest ranked score. Handles with multiple placements on
-	// different clusters get the best cluster's score, because Poolboy's
-	// sort only has one preferenceScore field per handle.
-	newScore := bestScore(resp)
+	scoreMap := buildScoreMap(resp)
+	var scored int
 
-	currentScore, _ := placement.GetCurrentScore(&handle)
-	if newScore == currentScore {
-		log.Info("Score unchanged, skipping patch",
-			"handle", req.Name, "namespace", req.Namespace,
-			"preferenceScore", currentScore)
-		return ctrl.Result{}, nil
-	}
+	for _, hwc := range resolved {
+		newScore := scoreMap[hwc.clusterName]
 
-	if r.Config.DryRun {
-		log.Info("[DRY-RUN] Would update preference score",
-			"handle", req.Name, "namespace", req.Namespace,
+		handleSpec, err := placement.ParseHandleSpec(hwc.handle)
+		if err != nil {
+			result = "error"
+			return ctrl.Result{}, fmt.Errorf("parsing handle spec %s: %w", hwc.handle.GetName(), err)
+		}
+		currentScore := float64(0)
+		if handleSpec.PreferenceScore != nil {
+			currentScore = *handleSpec.PreferenceScore
+		}
+		if newScore == currentScore {
+			continue
+		}
+
+		if r.Config.DryRun {
+			log.Info("[DRY-RUN] Would update preference score",
+				"pool", req.Name, "handle", hwc.handle.GetName(),
+				"cluster", hwc.clusterName,
+				"oldPreferenceScore", currentScore,
+				"newPreferenceScore", newScore,
+			)
+			scored++
+			continue
+		}
+
+		handleStatus, _ := placement.ParseHandleStatus(hwc.handle)
+		if handleStatus == nil || len(handleStatus.Placements) == 0 {
+			p := []placement.Placement{{ClusterName: hwc.clusterName}}
+			if err := r.patchStatusPlacements(ctx, hwc.handle, p); err != nil {
+				if apierrors.IsConflict(err) {
+					log.Info("Conflict caching placements, will retry",
+						"pool", req.Name, "handle", hwc.handle.GetName())
+					return ctrl.Result{Requeue: true}, nil
+				}
+				result = "error"
+				return ctrl.Result{}, fmt.Errorf("caching placements for %s: %w", hwc.handle.GetName(), err)
+			}
+		}
+
+		if err := r.patchPreferenceScore(ctx, hwc.handle, newScore); err != nil {
+			if apierrors.IsConflict(err) {
+				log.Info("Conflict patching score, will retry",
+					"pool", req.Name, "handle", hwc.handle.GetName())
+				return ctrl.Result{Requeue: true}, nil
+			}
+			result = "error"
+			return ctrl.Result{}, fmt.Errorf("patching score for %s: %w", hwc.handle.GetName(), err)
+		}
+
+		ScorePatchesTotal.WithLabelValues(domain, hwc.clusterName).Inc()
+		key := hwc.handle.GetNamespace() + "/" + hwc.handle.GetName()
+		r.LastWrittenScores.Store(key, newScore)
+		scored++
+
+		log.Info("Updated preference score",
+			"pool", req.Name, "handle", hwc.handle.GetName(),
+			"cluster", hwc.clusterName,
 			"oldPreferenceScore", currentScore,
 			"newPreferenceScore", newScore,
 		)
-		return ctrl.Result{}, nil
 	}
 
-	if err := r.patchPreferenceScore(ctx, &handle, newScore); err != nil {
-		result = "error"
-		if apierrors.IsConflict(err) {
-			log.Info("Conflict patching score, will retry",
-				"handle", req.Name, "namespace", req.Namespace)
-			return ctrl.Result{Requeue: true}, nil
-		}
-		return ctrl.Result{}, fmt.Errorf("patching score for %s/%s: %w", req.Namespace, req.Name, err)
-	}
+	HandlesScored.WithLabelValues(domain).Set(float64(scored))
 
-	if len(resp.Ranked) > 0 {
-		ScorePatchesTotal.WithLabelValues(domain, resp.Ranked[0].ClusterName).Inc()
-	}
-
-	r.LastWrittenScores.Store(req.NamespacedName.String(), newScore)
-	r.updateHandlesTracked()
-
-	log.Info("Updated preference score",
-		"handle", req.Name, "namespace", req.Namespace,
-		"oldPreferenceScore", currentScore,
-		"newPreferenceScore", newScore,
+	log.Info("Pool reconciliation complete",
+		"pool", req.Name, "namespace", req.Namespace,
+		"handlesScored", scored,
+		"handlesResolved", len(resolved),
+		"placementFailed", placementFailed,
+		"uniqueClusters", len(uniqueClusters),
 	)
 
+	if placementFailed > 0 {
+		return ctrl.Result{RequeueAfter: r.Config.RetryIntervalDuration()}, nil
+	}
 	return ctrl.Result{}, nil
 }
 
-// SetupWithManager registers the reconciler to watch unstructured
-// ResourceHandles, filtered by the bound-handle and self-update predicates.
-func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
+// SetupWithManager registers the reconciler to watch ResourcePool objects.
+func (r *ResourcePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(placement.ResourceHandleGVK)
+	obj.SetGroupVersionKind(placement.ResourcePoolGVK)
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(obj, builder.WithPredicates(
-			NewBoundHandlePredicate(),
-			NewSelfUpdatePredicate(&r.LastWrittenScores),
-		)).
-		Named("resourcehandle-scoring").
+		For(obj).
+		Named("resourcepool-scoring").
 		Complete(r)
 }
 
 // patchPreferenceScore applies a JSON merge patch to spec.preferenceScore.
-func (r *Reconciler) patchPreferenceScore(ctx context.Context, handle *unstructured.Unstructured, score float64) error {
+func (r *ResourcePoolReconciler) patchPreferenceScore(ctx context.Context, handle *unstructured.Unstructured, score float64) error {
 	scoreStr := strconv.FormatFloat(score, 'f', -1, 64)
 	patch := []byte(fmt.Sprintf(`{"spec":{"preferenceScore":%s}}`, scoreStr))
 	return r.Patch(ctx, handle, client.RawPatch(types.MergePatchType, patch))
 }
 
-// patchStatusPlacements caches resolved placements in status.placements
-// via the /status subresource. This avoids re-fetching AnarchySubjects
-// on every reconcile — the placement is resolved once and read from
-// the informer cache on subsequent passes.
-func (r *Reconciler) patchStatusPlacements(ctx context.Context, handle *unstructured.Unstructured, placements []placement.Placement) error {
-	type placementEntry struct {
-		ClusterName string `json:"clusterName"`
-		Name        string `json:"name,omitempty"`
-		Namespace   string `json:"namespace,omitempty"`
-	}
-
-	entries := make([]placementEntry, len(placements))
-	for i, p := range placements {
-		entries[i] = placementEntry{
-			ClusterName: p.ClusterName,
-			Name:        p.Name,
-			Namespace:   p.Namespace,
-		}
-	}
-
-	placementsJSON, err := json.Marshal(entries)
+// patchStatusPlacements caches resolved placements in status.placements.
+func (r *ResourcePoolReconciler) patchStatusPlacements(ctx context.Context, handle *unstructured.Unstructured, placements []placement.Placement) error {
+	placementsJSON, err := json.Marshal(placements)
 	if err != nil {
 		return fmt.Errorf("marshaling placements: %w", err)
 	}
@@ -216,38 +278,25 @@ func (r *Reconciler) patchStatusPlacements(ctx context.Context, handle *unstruct
 	return r.Status().Patch(ctx, handle, client.RawPatch(types.MergePatchType, patch))
 }
 
-// updateHandlesTracked counts entries in LastWrittenScores and sets the
-// handles-tracked gauge. Called after each successful score patch.
-func (r *Reconciler) updateHandlesTracked() {
-	var count int
-	r.LastWrittenScores.Range(func(_, _ any) bool { count++; return true })
-	HandlesTracked.WithLabelValues(r.Config.ClusterDomain).Set(float64(count))
+// deduplicateClusters returns unique cluster names from the resolved handles,
+// preserving the order of first appearance.
+func deduplicateClusters(handles []handleWithCluster) []string {
+	seen := make(map[string]bool)
+	var clusters []string
+	for _, hwc := range handles {
+		if !seen[hwc.clusterName] {
+			seen[hwc.clusterName] = true
+			clusters = append(clusters, hwc.clusterName)
+		}
+	}
+	return clusters
 }
 
-// buildCandidates converts placements to scheduler candidates.
-func buildCandidates(placements []placement.Placement) []scheduler.Candidate {
-	candidates := make([]scheduler.Candidate, len(placements))
-	for i, p := range placements {
-		c := scheduler.Candidate{ClusterName: p.ClusterName}
-		if p.Name != "" {
-			name := p.Name
-			c.HandleName = &name
-		}
-		if p.Namespace != "" {
-			ns := p.Namespace
-			c.HandleNamespace = &ns
-		}
-		candidates[i] = c
+// buildScoreMap creates a cluster→score lookup from the evaluate response.
+func buildScoreMap(resp *scheduler.EvaluateResponse) map[string]float64 {
+	m := make(map[string]float64, len(resp.Ranked))
+	for _, sc := range resp.Ranked {
+		m[sc.ClusterName] = sc.Score
 	}
-	return candidates
-}
-
-// bestScore returns the highest score from the evaluate response.
-// Ranked is sorted by score descending, so the first entry is the best.
-// Returns 0 if all candidates were excluded or the response is empty.
-func bestScore(resp *scheduler.EvaluateResponse) float64 {
-	if len(resp.Ranked) > 0 {
-		return resp.Ranked[0].Score
-	}
-	return 0
+	return m
 }
