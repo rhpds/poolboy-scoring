@@ -162,7 +162,20 @@ func GetPlacementsFromStatus(obj *unstructured.Unstructured) ([]Placement, bool)
 
 // GetCurrentScore reads spec.preferenceScore from a ResourceHandle.
 // Returns (score, true) if present, (0, false) if the field is not set.
+//
+// Handles both float64 and int64 values because Kubernetes' unstructured
+// converter stores round numbers (like 50.0) as int64 internally.
 func GetCurrentScore(obj *unstructured.Unstructured) (float64, bool) {
-	score, found, _ := unstructured.NestedFloat64(obj.Object, "spec", "preferenceScore")
-	return score, found
+	val, found, err := unstructured.NestedFieldNoCopy(obj.Object, "spec", "preferenceScore")
+	if !found || err != nil {
+		return 0, false
+	}
+	switch v := val.(type) {
+	case float64:
+		return v, true
+	case int64:
+		return float64(v), true
+	default:
+		return 0, false
+	}
 }

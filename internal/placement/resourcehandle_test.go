@@ -631,6 +631,16 @@ func TestGetCurrentScore(t *testing.T) {
 			want:      0,
 			wantFound: true,
 		},
+		{
+			name: "score stored as int64 (round number)",
+			obj: &unstructured.Unstructured{Object: map[string]interface{}{
+				"spec": map[string]interface{}{
+					"preferenceScore": int64(50),
+				},
+			}},
+			want:      50.0,
+			wantFound: true,
+		},
 	}
 
 	for _, tt := range tests {

@@ -25,6 +25,7 @@ type Config struct {
 	// Timing
 	ResyncInterval string `envconfig:"RESYNC_INTERVAL" default:"5m"`
 	ScoreTimeout   string `envconfig:"SCORE_TIMEOUT" default:"5s"`
+	RetryInterval  string `envconfig:"RETRY_INTERVAL" default:"30s"`
 
 	// Leader election
 	LeaderElection   bool   `envconfig:"LEADER_ELECTION" default:"true"`
@@ -63,6 +64,15 @@ func (c *Config) ResyncIntervalDuration() time.Duration {
 	d, err := time.ParseDuration(c.ResyncInterval)
 	if err != nil {
 		return 5 * time.Minute
+	}
+	return d
+}
+
+// RetryIntervalDuration parses the RetryInterval string (e.g. "30s") into a time.Duration.
+func (c *Config) RetryIntervalDuration() time.Duration {
+	d, err := time.ParseDuration(c.RetryInterval)
+	if err != nil {
+		return 30 * time.Second
 	}
 	return d
 }

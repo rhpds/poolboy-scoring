@@ -38,4 +38,13 @@ var (
 		Version:  "v1",
 		Resource: "anarchysubjects",
 	}
+
+	// ResourceHandleGVK is the GroupVersionKind for ResourceHandle.
+	// GVR (above) uses the plural resource name for REST endpoints via the dynamic client.
+	// GVK uses the singular Kind for type identification via controller-runtime's client.Client.
+	ResourceHandleGVK = schema.GroupVersionKind{
+		Group:   "poolboy.gpte.redhat.com",
+		Version: "v1",
+		Kind:    "ResourceHandle",
+	}
 )
