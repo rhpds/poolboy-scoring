@@ -4,20 +4,21 @@ import (
 	"context"
 	"fmt"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // PlacementLookup resolves a ResourceHandle's cluster placements by
-// orchestrating the field extraction functions and the dynamic client.
+// orchestrating the field extraction functions and the controller-runtime client.
 type PlacementLookup struct {
-	dynamicClient dynamic.Interface
+	reader client.Reader
 }
 
-// NewLookup creates a PlacementLookup with the given dynamic client.
-func NewLookup(dynamicClient dynamic.Interface) *PlacementLookup {
-	return &PlacementLookup{dynamicClient: dynamicClient}
+// NewLookup creates a PlacementLookup with the given client.Reader.
+// In production, pass mgr.GetClient(). In tests, pass a fake client.
+func NewLookup(reader client.Reader) *PlacementLookup {
+	return &PlacementLookup{reader: reader}
 }
 
 // Lookup resolves all cluster placements for a ResourceHandle.
@@ -53,17 +54,20 @@ func (p *PlacementLookup) resolveFromAnarchySubjects(ctx context.Context, handle
 	var lastErr error
 
 	for _, ref := range refs {
-		subject, err := p.dynamicClient.
-			Resource(AnarchySubjectGVR).
-			Namespace(ref.Namespace).
-			Get(ctx, ref.Name, metav1.GetOptions{})
+		var subject unstructured.Unstructured
+		subject.SetGroupVersionKind(AnarchySubjectGVK)
+
+		err := p.reader.Get(ctx, types.NamespacedName{
+			Name:      ref.Name,
+			Namespace: ref.Namespace,
+		}, &subject)
 		if err != nil {
 			lastErr = fmt.Errorf("fetching AnarchySubject %s/%s for handle %s/%s: %w",
 				ref.Namespace, ref.Name, handle.GetNamespace(), handle.GetName(), err)
 			continue
 		}
 
-		placement, err := ExtractPlacement(subject)
+		placement, err := ExtractPlacement(&subject)
 		if err != nil {
 			continue
 		}

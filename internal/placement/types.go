@@ -23,28 +23,19 @@ type ResourceRef struct {
 	Namespace  string
 }
 
-// GVR constants for the Kubernetes dynamic client.
-// These are var (not const) because schema.GroupVersionResource is a struct,
+// GVK constants for controller-runtime's client.Client.
+// These are var (not const) because schema.GroupVersionKind is a struct,
 // and Go only allows const for primitive types.
 var (
-	ResourceHandleGVR = schema.GroupVersionResource{
-		Group:    "poolboy.gpte.redhat.com",
-		Version:  "v1",
-		Resource: "resourcehandles",
-	}
-
-	AnarchySubjectGVR = schema.GroupVersionResource{
-		Group:    "anarchy.gpte.redhat.com",
-		Version:  "v1",
-		Resource: "anarchysubjects",
-	}
-
-	// ResourceHandleGVK is the GroupVersionKind for ResourceHandle.
-	// GVR (above) uses the plural resource name for REST endpoints via the dynamic client.
-	// GVK uses the singular Kind for type identification via controller-runtime's client.Client.
 	ResourceHandleGVK = schema.GroupVersionKind{
 		Group:   "poolboy.gpte.redhat.com",
 		Version: "v1",
 		Kind:    "ResourceHandle",
+	}
+
+	AnarchySubjectGVK = schema.GroupVersionKind{
+		Group:   "anarchy.gpte.redhat.com",
+		Version: "v1",
+		Kind:    "AnarchySubject",
 	}
 )

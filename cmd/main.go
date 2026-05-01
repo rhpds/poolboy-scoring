@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -48,15 +47,6 @@ func run(ctx context.Context, cfg *config.Config, restCfg *rest.Config) error {
 		"debug", cfg.Debug,
 	)
 
-	if restCfg == nil {
-		return fmt.Errorf("creating dynamic client: REST config is nil")
-	}
-
-	dynamicClient, err := dynamic.NewForConfig(restCfg)
-	if err != nil {
-		return fmt.Errorf("creating dynamic client: %w", err)
-	}
-
 	scheme := runtime.NewScheme()
 	mgr, err := ctrl.NewManager(restCfg, ctrl.Options{
 		Scheme:                 scheme,
@@ -74,7 +64,7 @@ func run(ctx context.Context, cfg *config.Config, restCfg *rest.Config) error {
 		cfg.ScoreTimeoutDuration(),
 	)
 
-	resolver := placement.NewLookup(dynamicClient)
+	resolver := placement.NewLookup(mgr.GetClient())
 
 	reconciler := &controller.Reconciler{
 		Client:   mgr.GetClient(),

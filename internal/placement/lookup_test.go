@@ -4,11 +4,10 @@ import (
 	"context"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func newAnarchySubject(name, namespace string, jobVars map[string]interface{}) *unstructured.Unstructured {
@@ -28,17 +27,12 @@ func newAnarchySubject(name, namespace string, jobVars map[string]interface{}) *
 	return obj
 }
 
-func newFakeClient(objects ...runtime.Object) *dynamicfake.FakeDynamicClient {
-	scheme := runtime.NewScheme()
-	scheme.AddKnownTypeWithName(
-		schema.GroupVersionKind{Group: "anarchy.gpte.redhat.com", Version: "v1", Kind: "AnarchySubject"},
-		&unstructured.Unstructured{},
-	)
-	scheme.AddKnownTypeWithName(
-		schema.GroupVersionKind{Group: "anarchy.gpte.redhat.com", Version: "v1", Kind: "AnarchySubjectList"},
-		&unstructured.UnstructuredList{},
-	)
-	return dynamicfake.NewSimpleDynamicClient(scheme, objects...)
+func newFakeReader(objects ...runtime.Object) client.Reader {
+	builder := fake.NewClientBuilder()
+	for _, obj := range objects {
+		builder.WithRuntimeObjects(obj)
+	}
+	return builder.Build()
 }
 
 func handleWithResources(refs ...map[string]interface{}) *unstructured.Unstructured {
@@ -260,8 +254,8 @@ func TestLookup(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := newFakeClient(tt.objects...)
-			lookup := NewLookup(client)
+			reader := newFakeReader(tt.objects...)
+			lookup := NewLookup(reader)
 
 			got, err := lookup.Lookup(context.Background(), tt.handle)
 			if (err != nil) != tt.wantErr {
@@ -292,8 +286,8 @@ func TestLookupErrorMessages(t *testing.T) {
 		handle.SetName("guid-test-handle")
 		handle.SetNamespace("poolboy")
 
-		client := newFakeClient()
-		lookup := NewLookup(client)
+		reader := newFakeReader()
+		lookup := NewLookup(reader)
 
 		_, err := lookup.Lookup(context.Background(), handle)
 		if err == nil {
@@ -316,8 +310,8 @@ func TestLookupErrorMessages(t *testing.T) {
 			"status": map[string]interface{}{},
 		}}
 
-		client := newFakeClient()
-		lookup := NewLookup(client)
+		reader := newFakeReader()
+		lookup := NewLookup(reader)
 
 		_, err := lookup.Lookup(context.Background(), handle)
 		if err == nil {
@@ -333,7 +327,7 @@ func TestLookupErrorMessages(t *testing.T) {
 	})
 }
 
-func TestLookupCachedPlacementsSkipsDynamicClient(t *testing.T) {
+func TestLookupCachedPlacementsSkipsClient(t *testing.T) {
 	handle := &unstructured.Unstructured{Object: map[string]interface{}{
 		"metadata": map[string]interface{}{
 			"name": "guid-cached", "namespace": "poolboy",
@@ -347,8 +341,7 @@ func TestLookupCachedPlacementsSkipsDynamicClient(t *testing.T) {
 		},
 	}}
 
-	// Pass nil dynamic client — if Lookup tries to use it, it panics
-	lookup := &PlacementLookup{dynamicClient: nil}
+	lookup := &PlacementLookup{reader: nil}
 
 	got, err := lookup.Lookup(context.Background(), handle)
 	if err != nil {
@@ -382,8 +375,8 @@ func TestLookupPartialFailure(t *testing.T) {
 		"sandbox_openshift_cluster": "ocpv08",
 	})
 
-	client := newFakeClient(validSubject)
-	lookup := NewLookup(client)
+	reader := newFakeReader(validSubject)
+	lookup := NewLookup(reader)
 
 	got, err := lookup.Lookup(context.Background(), handle)
 	if err != nil {
@@ -398,22 +391,12 @@ func TestLookupPartialFailure(t *testing.T) {
 }
 
 func TestNewLookup(t *testing.T) {
-	client := newFakeClient()
-	lookup := NewLookup(client)
+	reader := newFakeReader()
+	lookup := NewLookup(reader)
 	if lookup == nil {
 		t.Fatal("NewLookup() returned nil")
 	}
-	if lookup.dynamicClient == nil {
-		t.Fatal("NewLookup() did not set dynamicClient")
-	}
-
-	// Verify the dynamic client is functional by doing a Get
-	// that should return not-found (not panic)
-	_, err := lookup.dynamicClient.
-		Resource(AnarchySubjectGVR).
-		Namespace("test").
-		Get(context.Background(), "nonexistent", metav1.GetOptions{})
-	if err == nil {
-		t.Fatal("expected not-found error, got nil")
+	if lookup.reader == nil {
+		t.Fatal("NewLookup() did not set reader")
 	}
 }

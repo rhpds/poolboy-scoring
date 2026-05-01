@@ -59,9 +59,4 @@ func TestRun_NilRestConfig(t *testing.T) {
 	if err == nil {
 		t.Fatal("run() should return error with nil rest config")
 	}
-
-	want := "creating dynamic client: REST config is nil"
-	if err.Error() != want {
-		t.Fatalf("unexpected error message: got %q, want %q", err.Error(), want)
-	}
 }
