@@ -126,6 +126,40 @@ func GetAnarchySubjectRefs(obj *unstructured.Unstructured) ([]ResourceRef, error
 	return refs, nil
 }
 
+// GetPlacementsFromStatus reads status.placements (array) from a ResourceHandle.
+// This is the cached version written by the reconciler after resolving all
+// AnarchySubject refs. Returns (placements, true) if at least one entry exists.
+func GetPlacementsFromStatus(obj *unstructured.Unstructured) ([]Placement, bool) {
+	raw, found, _ := unstructured.NestedSlice(obj.Object, "status", "placements")
+	if !found || len(raw) == 0 {
+		return nil, false
+	}
+
+	var placements []Placement
+	for _, item := range raw {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		clusterName, _ := m["clusterName"].(string)
+		if clusterName == "" {
+			continue
+		}
+		name, _ := m["name"].(string)
+		namespace, _ := m["namespace"].(string)
+		placements = append(placements, Placement{
+			ClusterName: clusterName,
+			Name:        name,
+			Namespace:   namespace,
+		})
+	}
+
+	if len(placements) == 0 {
+		return nil, false
+	}
+	return placements, true
+}
+
 // GetCurrentScore reads spec.preferenceScore from a ResourceHandle.
 // Returns (score, true) if present, (0, false) if the field is not set.
 func GetCurrentScore(obj *unstructured.Unstructured) (float64, bool) {

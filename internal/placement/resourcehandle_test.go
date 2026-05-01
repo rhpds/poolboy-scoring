@@ -454,6 +454,148 @@ func TestGetAnarchySubjectRefs(t *testing.T) {
 	}
 }
 
+func TestGetPlacementsFromStatus(t *testing.T) {
+	tests := []struct {
+		name      string
+		obj       *unstructured.Unstructured
+		want      []Placement
+		wantFound bool
+	}{
+		{
+			name: "single placement",
+			obj: &unstructured.Unstructured{Object: map[string]interface{}{
+				"status": map[string]interface{}{
+					"placements": []interface{}{
+						map[string]interface{}{
+							"clusterName": "ocpv06",
+							"name":        "abc12-f5da0b1e",
+							"namespace":   "sandbox-abc12-ocp4-cluster",
+						},
+					},
+				},
+			}},
+			want: []Placement{
+				{ClusterName: "ocpv06", Name: "abc12-f5da0b1e", Namespace: "sandbox-abc12-ocp4-cluster"},
+			},
+			wantFound: true,
+		},
+		{
+			name: "multiple placements on different clusters",
+			obj: &unstructured.Unstructured{Object: map[string]interface{}{
+				"status": map[string]interface{}{
+					"placements": []interface{}{
+						map[string]interface{}{
+							"clusterName": "ocpv10",
+							"name":        "52vx4-pool",
+							"namespace":   "sandbox-52vx4-ocp4-cluster",
+						},
+						map[string]interface{}{
+							"clusterName": "ocpv05",
+							"name":        "52vx4-workload",
+							"namespace":   "sandbox-52vx4-ocp4-cluster",
+						},
+					},
+				},
+			}},
+			want: []Placement{
+				{ClusterName: "ocpv10", Name: "52vx4-pool", Namespace: "sandbox-52vx4-ocp4-cluster"},
+				{ClusterName: "ocpv05", Name: "52vx4-workload", Namespace: "sandbox-52vx4-ocp4-cluster"},
+			},
+			wantFound: true,
+		},
+		{
+			name: "tenant cluster — no name or namespace",
+			obj: &unstructured.Unstructured{Object: map[string]interface{}{
+				"status": map[string]interface{}{
+					"placements": []interface{}{
+						map[string]interface{}{
+							"clusterName": "cluster-nm66z",
+						},
+					},
+				},
+			}},
+			want: []Placement{
+				{ClusterName: "cluster-nm66z"},
+			},
+			wantFound: true,
+		},
+		{
+			name: "empty placements array",
+			obj: &unstructured.Unstructured{Object: map[string]interface{}{
+				"status": map[string]interface{}{
+					"placements": []interface{}{},
+				},
+			}},
+			wantFound: false,
+		},
+		{
+			name: "missing placements field",
+			obj: &unstructured.Unstructured{Object: map[string]interface{}{
+				"status": map[string]interface{}{
+					"healthy": true,
+				},
+			}},
+			wantFound: false,
+		},
+		{
+			name: "skips entries without clusterName",
+			obj: &unstructured.Unstructured{Object: map[string]interface{}{
+				"status": map[string]interface{}{
+					"placements": []interface{}{
+						map[string]interface{}{
+							"name":      "some-name",
+							"namespace": "some-ns",
+						},
+						map[string]interface{}{
+							"clusterName": "ocpv09",
+							"name":        "valid",
+						},
+					},
+				},
+			}},
+			want: []Placement{
+				{ClusterName: "ocpv09", Name: "valid"},
+			},
+			wantFound: true,
+		},
+		{
+			name: "all entries missing clusterName",
+			obj: &unstructured.Unstructured{Object: map[string]interface{}{
+				"status": map[string]interface{}{
+					"placements": []interface{}{
+						map[string]interface{}{
+							"name": "no-cluster",
+						},
+					},
+				},
+			}},
+			wantFound: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, found := GetPlacementsFromStatus(tt.obj)
+			if found != tt.wantFound {
+				t.Errorf("GetPlacementsFromStatus() found = %v, want %v", found, tt.wantFound)
+			}
+			if tt.want == nil && got != nil {
+				t.Errorf("GetPlacementsFromStatus() = %+v, want nil", got)
+			}
+			if tt.want != nil {
+				if len(got) != len(tt.want) {
+					t.Fatalf("GetPlacementsFromStatus() returned %d placements, want %d", len(got), len(tt.want))
+				}
+				for i := range tt.want {
+					if got[i] != tt.want[i] {
+						t.Errorf("GetPlacementsFromStatus()[%d] = %+v, want %+v", i, got[i], tt.want[i])
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestGetCurrentScore(t *testing.T) {
 	tests := []struct {
 		name      string
