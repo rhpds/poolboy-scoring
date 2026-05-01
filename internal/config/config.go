@@ -31,8 +31,9 @@ type Config struct {
 	LeaderElection   bool   `envconfig:"LEADER_ELECTION" default:"true"`
 	LeaderElectionID string `envconfig:"LEADER_ELECTION_ID" default:"poolboy-scoring"`
 
-	// Metrics server
-	MetricsBindAddress string `envconfig:"METRICS_BIND_ADDRESS" default:":8080"`
+	// Server bind addresses
+	HealthProbeBindAddress string `envconfig:"HEALTH_PROBE_BIND_ADDRESS" default:":8081"`
+	MetricsBindAddress     string `envconfig:"METRICS_BIND_ADDRESS" default:":8080"`
 	MetricsUsername    string `envconfig:"METRICS_USERNAME" default:"metrics"`
 	MetricsPassword    string `envconfig:"METRICS_PASSWORD" required:"true"`
 
