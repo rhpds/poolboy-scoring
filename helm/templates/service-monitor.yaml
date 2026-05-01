@@ -1,0 +1,27 @@
+{{- if and .Values.deploy .Values.metrics.enabled -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "poolboyScoring.name" . }}
+  namespace: {{ include "poolboyScoring.namespaceName" . }}
+  labels:
+    {{- include "poolboyScoring.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "poolboyScoring.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+    - {{ include "poolboyScoring.namespaceName" . }}
+  endpoints:
+  - port: {{ include "poolboyScoring.name" . }}
+    interval: "30s"
+    path: /metrics
+    basicAuth:
+      username:
+        name: {{ include "poolboyScoring.name" . }}-metrics-credentials
+        key: METRICS_USERNAME
+      password:
+        name: {{ include "poolboyScoring.name" . }}-metrics-credentials
+        key: METRICS_PASSWORD
+{{- end }}

@@ -79,28 +79,28 @@ func TestEvaluateRequest_MarshalJSON(t *testing.T) {
 
 func TestScoredCandidate_UnmarshalJSON(t *testing.T) {
 	tests := []struct {
-		name            string
-		input           string
-		expectedCluster string
-		expectedScore   float64
+		name             string
+		input            string
+		expectedCluster  string
+		expectedScore    float64
 		expectedEligible bool
-		hasReason       bool
+		hasReason        bool
 	}{
 		{
-			name:            "eligible candidate",
-			input:           `{"cluster_name":"ocpv05","handle_name":"abc12","score":82.5,"eligible":true}`,
-			expectedCluster: "ocpv05",
-			expectedScore:   82.5,
+			name:             "eligible candidate",
+			input:            `{"cluster_name":"ocpv05","handle_name":"abc12","score":82.5,"eligible":true}`,
+			expectedCluster:  "ocpv05",
+			expectedScore:    82.5,
 			expectedEligible: true,
-			hasReason:       false,
+			hasReason:        false,
 		},
 		{
-			name:            "ineligible candidate with reason",
-			input:           `{"cluster_name":"ocpv06","score":0,"eligible":false,"ineligibility_reason":"cluster in maintenance"}`,
-			expectedCluster: "ocpv06",
-			expectedScore:   0,
+			name:             "ineligible candidate with reason",
+			input:            `{"cluster_name":"ocpv06","score":0,"eligible":false,"ineligibility_reason":"cluster in maintenance"}`,
+			expectedCluster:  "ocpv06",
+			expectedScore:    0,
 			expectedEligible: false,
-			hasReason:       true,
+			hasReason:        true,
 		},
 	}
 

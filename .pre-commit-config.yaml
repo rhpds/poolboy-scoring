@@ -1,0 +1,30 @@
+repos:
+  - repo: local
+    hooks:
+      - id: go-fmt
+        name: go fmt
+        entry: bash -c 'gofmt -l -w $(find . -name "*.go" -not -path "./vendor/*")'
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: go-mod-tidy
+        name: go mod tidy
+        entry: bash -c 'go mod tidy'
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: go-vet
+        name: go vet
+        entry: bash -c 'go vet ./...'
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: helm-lint
+        name: helm lint
+        entry: bash -c 'helm lint helm/'
+        language: system
+        files: ^helm/
+        pass_filenames: false

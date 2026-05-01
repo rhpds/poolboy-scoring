@@ -1,0 +1,37 @@
+# Helm values for local/dev deployment.
+# Copy to helm-vars-dev.yaml and edit:
+#   cp helm-vars-dev.yaml.example helm-vars-dev.yaml
+#
+# This file overrides values.yaml for dev environments.
+# Only include values that differ from defaults.
+
+deploy: true
+
+namespace:
+  create: true
+  name: poolboy-scoring-dev
+
+# Debug logging (human-readable)
+debug: true
+clusterDomain: babydev.dev.open.redhat.com
+
+# Cluster Scheduler URL
+# Same namespace:
+#   http://cluster-scheduler:8080
+# Cross-namespace:
+#   http://cluster-scheduler.cluster-scheduler.svc.cluster.local:8080
+clusterScheduler:
+  url: http://cluster-scheduler.cluster-scheduler.svc.cluster.local:8080
+
+# Reduced resources for dev
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Disable ServiceMonitor in dev (no Prometheus operator)
+metrics:
+  enabled: false

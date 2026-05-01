@@ -27,5 +27,8 @@ Thumbs.db
 bin/
 dist/
 
+# Helm dev overrides
+helm-vars-dev.yaml
+
 # Plan
 plans/

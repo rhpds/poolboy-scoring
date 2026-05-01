@@ -33,9 +33,9 @@ type Config struct {
 
 	// Server bind addresses
 	HealthProbeBindAddress string `envconfig:"HEALTH_PROBE_BIND_ADDRESS" default:":8081"`
-	MetricsBindAddress     string `envconfig:"METRICS_BIND_ADDRESS" default:":8080"`
-	MetricsUsername    string `envconfig:"METRICS_USERNAME" default:"metrics"`
-	MetricsPassword    string `envconfig:"METRICS_PASSWORD" required:"true"`
+	MetricsBindAddress     string `envconfig:"METRICS_BIND_ADDRESS" default:":9090"`
+	MetricsUsername        string `envconfig:"METRICS_USERNAME" default:"metrics"`
+	MetricsPassword        string `envconfig:"METRICS_PASSWORD" required:"true"`
 
 	// Operation mode
 	DryRun bool `envconfig:"DRY_RUN" default:"false"`

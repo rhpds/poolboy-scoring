@@ -152,8 +152,8 @@ func TestParseHandleStatus(t *testing.T) {
 			wantPlacements: 2,
 		},
 		{
-			name: "no status",
-			obj:  &unstructured.Unstructured{Object: map[string]interface{}{}},
+			name:    "no status",
+			obj:     &unstructured.Unstructured{Object: map[string]interface{}{}},
 			wantNil: true,
 		},
 		{

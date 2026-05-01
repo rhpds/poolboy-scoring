@@ -8,8 +8,8 @@ import "time"
 // ClusterName is required. HandleName and HandleNamespace are optional —
 // using *string so nil omits them from JSON (vs "" which would send an empty string).
 type Candidate struct {
-	ClusterName    string  `json:"cluster_name"`
-	HandleName     *string `json:"handle_name,omitempty"`
+	ClusterName     string  `json:"cluster_name"`
+	HandleName      *string `json:"handle_name,omitempty"`
 	HandleNamespace *string `json:"handle_namespace,omitempty"`
 }
 

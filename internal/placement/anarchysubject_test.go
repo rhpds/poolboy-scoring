@@ -136,8 +136,8 @@ func TestExtractPlacement(t *testing.T) {
 			wantErr:     true,
 		},
 		{
-			name: "missing spec.vars entirely",
-			spec: &AnarchySubjectSpec{},
+			name:        "missing spec.vars entirely",
+			spec:        &AnarchySubjectSpec{},
 			subjectName: "some-subject",
 			wantErr:     true,
 		},

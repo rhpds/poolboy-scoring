@@ -28,7 +28,7 @@ func testConfig() *config.Config {
 		LeaderElectionID:       "test-poolboy-scoring",
 		HealthProbeBindAddress: "0",
 		MetricsBindAddress:     "0",
-		MetricsUsername:         "metrics",
+		MetricsUsername:        "metrics",
 		MetricsPassword:        "test",
 		Debug:                  true,
 	}

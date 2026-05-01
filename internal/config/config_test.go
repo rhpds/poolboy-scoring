@@ -56,8 +56,8 @@ func TestLoad_AllDefaults(t *testing.T) {
 	if cfg.LeaderElectionID != "poolboy-scoring" {
 		t.Errorf("LeaderElectionID = %q, want %q", cfg.LeaderElectionID, "poolboy-scoring")
 	}
-	if cfg.MetricsBindAddress != ":8080" {
-		t.Errorf("MetricsBindAddress = %q, want %q", cfg.MetricsBindAddress, ":8080")
+	if cfg.MetricsBindAddress != ":9090" {
+		t.Errorf("MetricsBindAddress = %q, want %q", cfg.MetricsBindAddress, ":9090")
 	}
 	if cfg.MetricsUsername != "metrics" {
 		t.Errorf("MetricsUsername = %q, want %q", cfg.MetricsUsername, "metrics")

@@ -1,0 +1,18 @@
+{{- if and .Values.deploy .Values.metrics.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "poolboyScoring.name" . }}-metrics
+  namespace: {{ include "poolboyScoring.namespaceName" . }}
+  labels:
+    {{- include "poolboyScoring.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+  - name: {{ include "poolboyScoring.name" . }}
+    port: {{ .Values.metrics.port }}
+    protocol: TCP
+    targetPort: metrics
+  selector:
+    {{- include "poolboyScoring.selectorLabels" . | nindent 4 }}
+{{- end }}

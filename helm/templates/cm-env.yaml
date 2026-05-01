@@ -1,0 +1,24 @@
+{{- if .Values.deploy -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "poolboyScoring.name" . }}-env
+  namespace: {{ include "poolboyScoring.namespaceName" . }}
+  labels:
+    {{- include "poolboyScoring.labels" . | nindent 4 }}
+data:
+  CLUSTER_SCHEDULER_URL: {{ .Values.clusterScheduler.url | quote }}
+  CLUSTER_DOMAIN: {{ .Values.clusterDomain | quote }}
+  RESYNC_INTERVAL: {{ .Values.resyncInterval | quote }}
+  SCORE_TIMEOUT: {{ .Values.scoreTimeout | quote }}
+  RETRY_INTERVAL: {{ .Values.retryInterval | quote }}
+  LEADER_ELECTION: {{ .Values.leaderElection.enabled | quote }}
+  LEADER_ELECTION_ID: {{ .Values.leaderElection.id | quote }}
+  HEALTH_PROBE_BIND_ADDRESS: {{ .Values.healthProbeBindAddress | quote }}
+  METRICS_BIND_ADDRESS: {{ printf ":%v" .Values.metrics.port | quote }}
+  DRY_RUN: {{ .Values.dryRun | quote }}
+  DEBUG: {{ .Values.debug | quote }}
+  {{- range .Values.extraEnv }}
+  {{ .name | upper }}: {{ .value | quote }}
+  {{- end }}
+{{- end -}}
