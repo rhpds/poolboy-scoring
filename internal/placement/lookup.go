@@ -79,8 +79,10 @@ func (p *PlacementLookup) resolveFromAnarchySubjects(ctx context.Context, handle
 		if lastErr != nil {
 			return nil, lastErr
 		}
-		return nil, fmt.Errorf("no placements resolved for handle %s/%s: none of the %d AnarchySubject refs had sandbox_openshift_cluster",
-			handle.GetNamespace(), handle.GetName(), len(refs))
+		// All AnarchySubjects were fetched successfully but none had
+		// sandbox_openshift_cluster — this is a non-CNV workload.
+		// Return empty slice so the reconciler skips it silently.
+		return nil, nil
 	}
 
 	return placements, nil

@@ -178,6 +178,19 @@ func TestLookup(t *testing.T) {
 			},
 		},
 		{
+			name: "non-CNV workload — all refs exist but none have sandbox_openshift_cluster",
+			handle: handleWithResources(
+				anarchySubjectRef("rhel-vm", "babylon-anarchy-0"),
+			),
+			objects: []runtime.Object{
+				newAnarchySubject("rhel-vm", "babylon-anarchy-0", map[string]interface{}{
+					"cloud_provider": "aws",
+					"aws_region":     "us-east-2",
+				}),
+			},
+			want: nil,
+		},
+		{
 			name: "all AnarchySubjects not found — returns error",
 			handle: handleWithResources(
 				anarchySubjectRef("missing-subject", "babylon-anarchy-0"),
@@ -263,6 +276,9 @@ func TestLookup(t *testing.T) {
 			}
 
 			if tt.want == nil {
+				if got != nil && len(got) > 0 {
+					t.Errorf("Lookup() returned %+v, want nil/empty", got)
+				}
 				return
 			}
 
