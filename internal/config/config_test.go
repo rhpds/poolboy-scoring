@@ -152,6 +152,30 @@ func TestLoad_CustomValues(t *testing.T) {
 	}
 }
 
+func TestLoad_InvalidDuration(t *testing.T) {
+	tests := []struct {
+		name   string
+		envVar string
+		value  string
+	}{
+		{"invalid RESYNC_INTERVAL", "RESYNC_INTERVAL", "banana"},
+		{"invalid SCORE_TIMEOUT", "SCORE_TIMEOUT", "not-a-duration"},
+		{"invalid RETRY_INTERVAL", "RETRY_INTERVAL", "42x"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setRequiredEnv(t)
+			t.Setenv(tc.envVar, tc.value)
+
+			_, err := Load()
+			if err == nil {
+				t.Fatalf("Load() should return error for %s=%q", tc.envVar, tc.value)
+			}
+		})
+	}
+}
+
 func TestScoreTimeoutDuration(t *testing.T) {
 	tests := []struct {
 		name     string

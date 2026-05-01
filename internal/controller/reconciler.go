@@ -155,8 +155,8 @@ func (r *ResourcePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	ObserveSchedulerDuration(evalStart, domain)
 	if err != nil {
 		result = "error"
-		log.Info("Scheduler evaluation failed, keeping existing scores",
-			"pool", req.Name, "namespace", req.Namespace, "error", err.Error())
+		log.Error(err, "Scheduler evaluation failed, keeping existing scores",
+			"pool", req.Name, "namespace", req.Namespace)
 		return ctrl.Result{RequeueAfter: r.Config.RetryIntervalDuration()}, nil
 	}
 
