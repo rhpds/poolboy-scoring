@@ -109,6 +109,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{RequeueAfter: r.Config.RetryIntervalDuration()}, nil
 	}
 
+	respJSON, _ := json.Marshal(resp)
+	log.V(1).Info("Evaluate response",
+		"handle", req.Name, "namespace", req.Namespace,
+		"ranked", len(resp.Ranked), "excluded", len(resp.Excluded),
+		"strategy", resp.Strategy, "generatedAt", resp.GeneratedAt,
+		"response", json.RawMessage(respJSON),
+	)
+
 	// Use the highest ranked score. Handles with multiple placements on
 	// different clusters get the best cluster's score, because Poolboy's
 	// sort only has one preferenceScore field per handle.
@@ -116,14 +124,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	currentScore, _ := placement.GetCurrentScore(&handle)
 	if newScore == currentScore {
+		log.Info("Score unchanged, skipping patch",
+			"handle", req.Name, "namespace", req.Namespace,
+			"preferenceScore", currentScore)
 		return ctrl.Result{}, nil
 	}
 
 	if r.Config.DryRun {
 		log.Info("[DRY-RUN] Would update preference score",
 			"handle", req.Name, "namespace", req.Namespace,
-			"oldScore", currentScore,
-			"newScore", newScore,
+			"oldPreferenceScore", currentScore,
+			"newPreferenceScore", newScore,
 		)
 		return ctrl.Result{}, nil
 	}
@@ -147,8 +158,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	log.Info("Updated preference score",
 		"handle", req.Name, "namespace", req.Namespace,
-		"oldScore", currentScore,
-		"newScore", newScore,
+		"oldPreferenceScore", currentScore,
+		"newPreferenceScore", newScore,
 	)
 
 	return ctrl.Result{}, nil
