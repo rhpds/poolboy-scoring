@@ -86,11 +86,15 @@ func (p *PlacementLookup) resolveFromAnarchySubjects(ctx context.Context, handle
 
 		spec, err := ParseAnarchySubjectSpec(&subject)
 		if err != nil {
+			lastErr = fmt.Errorf("parsing AnarchySubject %s/%s spec: %w",
+				ref.Namespace, ref.Name, err)
 			continue
 		}
 
 		placement, err := ExtractPlacement(spec, subject.GetName())
 		if err != nil {
+			lastErr = fmt.Errorf("extracting placement from AnarchySubject %s/%s: %w",
+				ref.Namespace, ref.Name, err)
 			continue
 		}
 

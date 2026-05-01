@@ -104,7 +104,7 @@ func TestExtractPlacement(t *testing.T) {
 			},
 		},
 		{
-			name: "missing sandbox_openshift_cluster (non-CNV workload)",
+			name: "missing sandbox_openshift_cluster",
 			spec: &AnarchySubjectSpec{
 				Vars: &AnarchySubjectVars{
 					JobVars: map[string]interface{}{

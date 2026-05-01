@@ -45,11 +45,21 @@ type Config struct {
 }
 
 // Load reads configuration from environment variables.
-// Returns an error if a required field is missing or a type conversion fails.
+// Returns an error if a required field is missing, a type conversion fails,
+// or a duration field has an invalid format.
 func Load() (*Config, error) {
 	var cfg Config
 	if err := envconfig.Process("", &cfg); err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
+	}
+	if _, err := time.ParseDuration(cfg.ResyncInterval); err != nil {
+		return nil, fmt.Errorf("invalid RESYNC_INTERVAL %q: %w", cfg.ResyncInterval, err)
+	}
+	if _, err := time.ParseDuration(cfg.ScoreTimeout); err != nil {
+		return nil, fmt.Errorf("invalid SCORE_TIMEOUT %q: %w", cfg.ScoreTimeout, err)
+	}
+	if _, err := time.ParseDuration(cfg.RetryInterval); err != nil {
+		return nil, fmt.Errorf("invalid RETRY_INTERVAL %q: %w", cfg.RetryInterval, err)
 	}
 	return &cfg, nil
 }

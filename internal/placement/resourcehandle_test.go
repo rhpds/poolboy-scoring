@@ -236,7 +236,7 @@ func TestPlacementFromProvisionData(t *testing.T) {
 			wantFound: true,
 		},
 		{
-			name: "no sandbox_openshift_cluster — non-CNV provision_data",
+			name: "no sandbox_openshift_cluster in provision_data",
 			summary: &HandleSummary{
 				ProvisionData: map[string]interface{}{
 					"bastion_public_hostname": "bastion.abc.sandbox.com",

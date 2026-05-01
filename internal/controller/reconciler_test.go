@@ -944,3 +944,85 @@ func TestBuildScoreMap_Empty(t *testing.T) {
 		t.Errorf("expected empty map, got %v", m)
 	}
 }
+
+func TestBuildExcludedSet(t *testing.T) {
+	reason := "cluster in maintenance"
+	resp := &scheduler.EvaluateResponse{
+		Excluded: []scheduler.ScoredCandidate{
+			{ClusterName: "ocpv10", Eligible: false, IneligibilityReason: &reason},
+		},
+	}
+	m := buildExcludedSet(resp)
+	if !m["ocpv10"] {
+		t.Error("expected ocpv10 in excluded set")
+	}
+	if m["ocpv06"] {
+		t.Error("ocpv06 should not be in excluded set")
+	}
+}
+
+func TestBuildExcludedSet_Empty(t *testing.T) {
+	resp := &scheduler.EvaluateResponse{}
+	m := buildExcludedSet(resp)
+	if len(m) != 0 {
+		t.Errorf("expected empty set, got %v", m)
+	}
+}
+
+func TestReconcile_ExcludedClusterGetsScoreZero(t *testing.T) {
+	pool := newTestPool("test-pool", 2, []map[string]interface{}{
+		handleEntry("h-ranked", true),
+		handleEntry("h-excluded", true),
+	})
+
+	hRanked := newTestHandle("h-ranked", withScore(50), withCachedPlacements("ocpv06"))
+	hExcluded := newTestHandle("h-excluded", withScore(70), withCachedPlacements("ocpv10"))
+
+	resolver := newMockResolver()
+	resolver.placements["h-ranked"] = []placement.Placement{{ClusterName: "ocpv06"}}
+	resolver.placements["h-excluded"] = []placement.Placement{{ClusterName: "ocpv10"}}
+
+	reason := "cluster in maintenance"
+	scorer := &mockScorer{
+		response: &scheduler.EvaluateResponse{
+			Ranked: []scheduler.ScoredCandidate{
+				{ClusterName: "ocpv06", Score: 80, Eligible: true},
+			},
+			Excluded: []scheduler.ScoredCandidate{
+				{ClusterName: "ocpv10", Score: 0, Eligible: false, IneligibilityReason: &reason},
+			},
+			Strategy:    "most_capacity",
+			GeneratedAt: time.Now(),
+		},
+	}
+
+	c := fake.NewClientBuilder().WithObjects(pool, hRanked, hExcluded).Build()
+	r := newReconciler(c, scorer, resolver)
+
+	_, err := r.Reconcile(context.Background(), poolRequest("test-pool"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Ranked cluster should get new score
+	var updatedRanked unstructured.Unstructured
+	updatedRanked.SetGroupVersionKind(placement.ResourceHandleGVK)
+	if err := c.Get(context.Background(), k8stypes.NamespacedName{Name: "h-ranked", Namespace: "poolboy"}, &updatedRanked); err != nil {
+		t.Fatalf("get h-ranked: %v", err)
+	}
+	specRanked, _ := placement.ParseHandleSpec(&updatedRanked)
+	if specRanked.PreferenceScore == nil || *specRanked.PreferenceScore != 80 {
+		t.Errorf("h-ranked score = %v, want 80", specRanked.PreferenceScore)
+	}
+
+	// Excluded cluster should get score 0
+	var updatedExcluded unstructured.Unstructured
+	updatedExcluded.SetGroupVersionKind(placement.ResourceHandleGVK)
+	if err := c.Get(context.Background(), k8stypes.NamespacedName{Name: "h-excluded", Namespace: "poolboy"}, &updatedExcluded); err != nil {
+		t.Fatalf("get h-excluded: %v", err)
+	}
+	specExcluded, _ := placement.ParseHandleSpec(&updatedExcluded)
+	if specExcluded.PreferenceScore == nil || *specExcluded.PreferenceScore != 0 {
+		t.Errorf("h-excluded score = %v, want 0 (cluster excluded)", specExcluded.PreferenceScore)
+	}
+}

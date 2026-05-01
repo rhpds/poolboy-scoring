@@ -87,11 +87,11 @@ Entry point: `internal/controller/reconciler.go` — `ResourcePoolReconciler.Rec
 
 First match wins. Tier 3 results are cached as `status.placements` for subsequent reconciliations.
 
-### Self-update detection
+### No-op detection
 
-`internal/controller/reconciler.go` — `LastWrittenScores sync.Map`
+`internal/controller/reconciler.go` — score comparison before patching
 
-When the controller patches `spec.preferenceScore`, the API server generates a MODIFIED event. The controller stores each patch in a `sync.Map` keyed by `namespace/name`. On the next event, it compares the score — if it matches what was written, the event is a self-update and is skipped. Lost on restart, but the resync catches up.
+Before patching `spec.preferenceScore`, the controller compares the new score from the scheduler against the handle's current score. If they match, the patch is skipped. This avoids unnecessary API writes and the MODIFIED events they would generate. Since the controller watches ResourcePool (not ResourceHandle), patching a handle does not trigger a new reconciliation — no infinite loop is possible.
 
 ### Typed access via partial structs
 

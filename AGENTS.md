@@ -14,12 +14,6 @@ handles in a pool, groups them by cluster, and makes ONE batch `/evaluate` call.
 produces relative scores across clusters — the cluster-scheduler's `most_capacity`
 strategy requires multiple candidates to generate differentiated scores.
 
-## Self-update detection
-
-When the controller patches `spec.preferenceScore`, Kubernetes generates a MODIFIED
-event. The controller tracks last-written scores in a `sync.Map` and skips events
-where the score matches what it wrote — preventing an infinite reconcile loop.
-
 ## Skills
 
 Domain knowledge and conventions are documented in `skills/`:

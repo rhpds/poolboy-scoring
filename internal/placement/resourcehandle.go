@@ -10,7 +10,10 @@ import (
 // ParseHandleSpec converts the spec section of a ResourceHandle into a typed
 // struct. Returns a zero-value spec (not nil) if the field is missing.
 func ParseHandleSpec(obj *unstructured.Unstructured) (*ResourceHandleSpec, error) {
-	raw, found, _ := unstructured.NestedMap(obj.Object, "spec")
+	raw, found, err := unstructured.NestedMap(obj.Object, "spec")
+	if err != nil {
+		return nil, fmt.Errorf("reading spec from %s: %w", obj.GetName(), err)
+	}
 	if !found {
 		return &ResourceHandleSpec{}, nil
 	}
@@ -24,7 +27,10 @@ func ParseHandleSpec(obj *unstructured.Unstructured) (*ResourceHandleSpec, error
 // ParseHandleStatus converts the status section of a ResourceHandle into a
 // typed struct. Returns (nil, nil) if the handle has no status.
 func ParseHandleStatus(obj *unstructured.Unstructured) (*ResourceHandleStatus, error) {
-	raw, found, _ := unstructured.NestedMap(obj.Object, "status")
+	raw, found, err := unstructured.NestedMap(obj.Object, "status")
+	if err != nil {
+		return nil, fmt.Errorf("reading status from %s: %w", obj.GetName(), err)
+	}
 	if !found {
 		return nil, nil
 	}

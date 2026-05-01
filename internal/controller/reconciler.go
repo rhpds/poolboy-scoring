@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"sync"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -36,10 +35,9 @@ type handleWithCluster struct {
 // /evaluate call per pool, and patches each handle's spec.preferenceScore.
 type ResourcePoolReconciler struct {
 	client.Client
-	Scorer            scheduler.Scorer
-	Resolver          PlacementResolver
-	LastWrittenScores sync.Map
-	Config            *config.Config
+	Scorer   scheduler.Scorer
+	Resolver PlacementResolver
+	Config   *config.Config
 }
 
 // Reconcile processes a single ResourcePool.
@@ -111,7 +109,7 @@ func (r *ResourcePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			result = "error"
 			return ctrl.Result{}, fmt.Errorf("parsing handle spec %s: %w", entry.Name, err)
 		}
-		if handleSpec.ResourceClaim != nil {
+		if handleSpec.ResourceClaim != nil && len(handleSpec.ResourceClaim) > 0 {
 			continue
 		}
 
@@ -162,19 +160,35 @@ func (r *ResourcePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{RequeueAfter: r.Config.RetryIntervalDuration()}, nil
 	}
 
-	respJSON, _ := json.Marshal(resp)
-	log.V(1).Info("Evaluate response",
-		"pool", req.Name, "namespace", req.Namespace,
-		"candidates", len(candidates), "ranked", len(resp.Ranked),
-		"excluded", len(resp.Excluded), "strategy", resp.Strategy,
-		"response", json.RawMessage(respJSON),
-	)
+	if respJSON, err := json.Marshal(resp); err == nil {
+		log.V(1).Info("Evaluate response",
+			"pool", req.Name, "namespace", req.Namespace,
+			"candidates", len(candidates), "ranked", len(resp.Ranked),
+			"excluded", len(resp.Excluded), "strategy", resp.Strategy,
+			"response", json.RawMessage(respJSON),
+		)
+	} else {
+		log.V(1).Info("Evaluate response (marshal failed)",
+			"pool", req.Name, "namespace", req.Namespace,
+			"candidates", len(candidates), "ranked", len(resp.Ranked),
+			"excluded", len(resp.Excluded), "strategy", resp.Strategy,
+			"marshalError", err.Error(),
+		)
+	}
 
 	scoreMap := buildScoreMap(resp)
+	excludedSet := buildExcludedSet(resp)
 	var scored int
 
 	for _, hwc := range resolved {
-		newScore := scoreMap[hwc.clusterName]
+		var newScore float64
+		if excludedSet[hwc.clusterName] {
+			log.Info("Cluster excluded by scheduler, setting score to 0",
+				"pool", req.Name, "handle", hwc.handle.GetName(),
+				"cluster", hwc.clusterName)
+		} else {
+			newScore = scoreMap[hwc.clusterName]
+		}
 
 		handleSpec, err := placement.ParseHandleSpec(hwc.handle)
 		if err != nil {
@@ -200,7 +214,11 @@ func (r *ResourcePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			continue
 		}
 
-		handleStatus, _ := placement.ParseHandleStatus(hwc.handle)
+		handleStatus, err := placement.ParseHandleStatus(hwc.handle)
+		if err != nil {
+			result = "error"
+			return ctrl.Result{}, fmt.Errorf("parsing handle status %s: %w", hwc.handle.GetName(), err)
+		}
 		if handleStatus == nil || len(handleStatus.Placements) == 0 {
 			p := []placement.Placement{{ClusterName: hwc.clusterName}}
 			if err := r.patchStatusPlacements(ctx, hwc.handle, p); err != nil {
@@ -225,8 +243,6 @@ func (r *ResourcePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 
 		ScorePatchesTotal.WithLabelValues(domain, hwc.clusterName).Inc()
-		key := hwc.handle.GetNamespace() + "/" + hwc.handle.GetName()
-		r.LastWrittenScores.Store(key, newScore)
 		scored++
 
 		log.Info("Updated preference score",
@@ -301,6 +317,15 @@ func buildScoreMap(resp *scheduler.EvaluateResponse) map[string]float64 {
 	m := make(map[string]float64, len(resp.Ranked))
 	for _, sc := range resp.Ranked {
 		m[sc.ClusterName] = sc.Score
+	}
+	return m
+}
+
+// buildExcludedSet returns a set of cluster names that the scheduler excluded.
+func buildExcludedSet(resp *scheduler.EvaluateResponse) map[string]bool {
+	m := make(map[string]bool, len(resp.Excluded))
+	for _, sc := range resp.Excluded {
+		m[sc.ClusterName] = true
 	}
 	return m
 }

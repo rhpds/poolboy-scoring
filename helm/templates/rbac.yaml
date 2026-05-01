@@ -25,7 +25,7 @@ rules:
       - list
       - watch
       - patch
-  # ResourceHandles/status — patch status.placement (separate K8s API path)
+  # ResourceHandles/status — patch status.placements (separate K8s API path)
   - apiGroups:
       - poolboy.gpte.redhat.com
     resources:

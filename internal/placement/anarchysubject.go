@@ -10,7 +10,10 @@ import (
 // ParseAnarchySubjectSpec converts the spec section of an AnarchySubject into
 // a typed struct. Returns a zero-value spec (not nil) if the field is missing.
 func ParseAnarchySubjectSpec(obj *unstructured.Unstructured) (*AnarchySubjectSpec, error) {
-	raw, found, _ := unstructured.NestedMap(obj.Object, "spec")
+	raw, found, err := unstructured.NestedMap(obj.Object, "spec")
+	if err != nil {
+		return nil, fmt.Errorf("reading spec from AnarchySubject %s: %w", obj.GetName(), err)
+	}
 	if !found {
 		return &AnarchySubjectSpec{}, nil
 	}
@@ -23,7 +26,7 @@ func ParseAnarchySubjectSpec(obj *unstructured.Unstructured) (*AnarchySubjectSpe
 
 // ExtractPlacement reads sandbox_openshift_* fields from a parsed
 // AnarchySubjectSpec's job_vars. Returns an error if sandbox_openshift_cluster
-// is missing, which signals that this is not a CNV workload.
+// is missing or empty.
 func ExtractPlacement(spec *AnarchySubjectSpec, subjectName string) (*Placement, error) {
 	if spec == nil || spec.Vars == nil || spec.Vars.JobVars == nil {
 		return nil, fmt.Errorf("spec.vars.job_vars not found in AnarchySubject %s", subjectName)

@@ -37,7 +37,7 @@ var SchedulerDuration = prometheus.NewHistogramVec(
 )
 
 // HandlesScored reports how many ResourceHandles were scored in the
-// most recent reconciliation cycle across all pools.
+// most recent reconciliation of a single pool.
 var HandlesScored = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "poolboy_scoring_handles_scored",

@@ -178,7 +178,7 @@ func TestLookup(t *testing.T) {
 			},
 		},
 		{
-			name: "non-CNV workload — all refs exist but none have sandbox_openshift_cluster",
+			name: "no sandbox_openshift_cluster in job_vars — returns error",
 			handle: handleWithResources(
 				anarchySubjectRef("rhel-vm", "babylon-anarchy-0"),
 			),
@@ -188,7 +188,8 @@ func TestLookup(t *testing.T) {
 					"aws_region":     "us-east-2",
 				}),
 			},
-			want: nil,
+			want:    nil,
+			wantErr: true,
 		},
 		{
 			name: "all AnarchySubjects not found — returns error",
