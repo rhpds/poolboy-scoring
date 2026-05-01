@@ -1,8 +1,10 @@
 BINARY   := poolboy-scoring
 CMD      := ./cmd
 COVER    := coverage.out
+IMAGE    ?= poolboy-scoring
+TAG      ?= dev
 
-.PHONY: build run test cover lint clean
+.PHONY: build run test cover lint clean container-build
 
 build:
 	go build -o $(BINARY) $(CMD)
@@ -22,3 +24,6 @@ lint:
 
 clean:
 	rm -f $(BINARY) $(COVER)
+
+container-build:
+	podman build -t $(IMAGE):$(TAG) -f Containerfile .
