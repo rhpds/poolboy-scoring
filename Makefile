@@ -2,10 +2,13 @@ BINARY   := poolboy-scoring
 CMD      := ./cmd
 COVER    := coverage.out
 
-.PHONY: build test cover lint clean
+.PHONY: build run test cover lint clean
 
 build:
 	go build -o $(BINARY) $(CMD)
+
+run:
+	go run $(CMD)
 
 test:
 	go test ./... -v -count=1
