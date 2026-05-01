@@ -10,9 +10,11 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/rhpds/poolboy-scoring/internal/config"
 	"github.com/rhpds/poolboy-scoring/internal/controller"
+	appmetrics "github.com/rhpds/poolboy-scoring/internal/metrics"
 	"github.com/rhpds/poolboy-scoring/internal/placement"
 	"github.com/rhpds/poolboy-scoring/internal/scheduler"
 )
@@ -53,6 +55,10 @@ func run(ctx context.Context, cfg *config.Config, restCfg *rest.Config) error {
 		HealthProbeBindAddress: cfg.HealthProbeBindAddress,
 		LeaderElection:         cfg.LeaderElection,
 		LeaderElectionID:       cfg.LeaderElectionID,
+		Metrics: metricsserver.Options{
+			BindAddress:    cfg.MetricsBindAddress,
+			FilterProvider: appmetrics.BasicAuthFilterProvider(cfg.MetricsUsername, cfg.MetricsPassword),
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("creating manager: %w", err)
@@ -84,5 +90,10 @@ func run(ctx context.Context, cfg *config.Config, restCfg *rest.Config) error {
 	}
 
 	log.Info("Starting manager")
-	return mgr.Start(ctx)
+	if err := mgr.Start(ctx); err != nil {
+		return fmt.Errorf("manager exited: %w", err)
+	}
+
+	log.Info("Manager stopped cleanly")
+	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -29,7 +30,12 @@ func (BoundHandlePredicate) Create(e event.CreateEvent) bool {
 	if !ok {
 		return true
 	}
-	return !placement.IsHandleBound(obj)
+	if placement.IsHandleBound(obj) {
+		ctrl.Log.V(2).Info("Skipping bound handle on create",
+			"name", obj.GetName(), "namespace", obj.GetNamespace())
+		return false
+	}
+	return true
 }
 
 func (BoundHandlePredicate) Update(e event.UpdateEvent) bool {
@@ -37,7 +43,12 @@ func (BoundHandlePredicate) Update(e event.UpdateEvent) bool {
 	if !ok {
 		return true
 	}
-	return !placement.IsHandleBound(obj)
+	if placement.IsHandleBound(obj) {
+		ctrl.Log.V(2).Info("Skipping bound handle on update",
+			"name", obj.GetName(), "namespace", obj.GetNamespace())
+		return false
+	}
+	return true
 }
 
 func (BoundHandlePredicate) Delete(_ event.DeleteEvent) bool {
@@ -78,7 +89,13 @@ func (p SelfUpdatePredicate) Update(e event.UpdateEvent) bool {
 		return true
 	}
 
-	return currentScore != stored.(float64)
+	if currentScore == stored.(float64) {
+		ctrl.Log.V(2).Info("Skipping self-update",
+			"name", obj.GetName(), "namespace", obj.GetNamespace(),
+			"score", currentScore)
+		return false
+	}
+	return true
 }
 
 func (SelfUpdatePredicate) Delete(_ event.DeleteEvent) bool {

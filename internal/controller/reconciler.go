@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -45,25 +46,36 @@ type Reconciler struct {
 // evaluate → compare score → patch if changed → track in sync.Map.
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
+	domain := r.Config.ClusterDomain
+	result := "success"
+	defer func() { ReconcileTotal.WithLabelValues(domain, result).Inc() }()
 
 	var handle unstructured.Unstructured
 	handle.SetGroupVersionKind(placement.ResourceHandleGVK)
 	if err := r.Get(ctx, req.NamespacedName, &handle); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		if client.IgnoreNotFound(err) == nil {
+			result = "skipped"
+			return ctrl.Result{}, nil
+		}
+		result = "error"
+		return ctrl.Result{}, err
 	}
 
 	if placement.IsHandleBound(&handle) {
+		result = "skipped"
 		return ctrl.Result{}, nil
 	}
 
 	placements, err := r.Resolver.Lookup(ctx, &handle)
 	if err != nil {
+		result = "error"
 		log.Info("Failed to resolve placement, will retry",
 			"handle", req.Name, "namespace", req.Namespace, "error", err.Error())
 		return ctrl.Result{RequeueAfter: r.Config.RetryIntervalDuration()}, nil
 	}
 
 	if len(placements) == 0 {
+		result = "skipped"
 		log.V(1).Info("No placements resolved, skipping",
 			"handle", req.Name, "namespace", req.Namespace)
 		return ctrl.Result{}, nil
@@ -71,6 +83,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	if cached, _ := placement.GetPlacementsFromStatus(&handle); len(cached) == 0 {
 		if err := r.patchStatusPlacements(ctx, &handle, placements); err != nil {
+			result = "error"
 			if apierrors.IsConflict(err) {
 				log.Info("Conflict caching placements, will retry",
 					"handle", req.Name, "namespace", req.Namespace)
@@ -82,8 +95,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	candidates := buildCandidates(placements)
 
+	evalStart := time.Now()
 	resp, err := r.Scorer.Evaluate(ctx, candidates)
+	ObserveSchedulerDuration(evalStart, domain)
 	if err != nil {
+		result = "error"
 		log.Info("Scheduler evaluation failed, keeping existing score",
 			"handle", req.Name, "namespace", req.Namespace, "error", err.Error())
 		return ctrl.Result{RequeueAfter: r.Config.RetryIntervalDuration()}, nil
@@ -100,6 +116,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	if err := r.patchPreferenceScore(ctx, &handle, newScore); err != nil {
+		result = "error"
 		if apierrors.IsConflict(err) {
 			log.Info("Conflict patching score, will retry",
 				"handle", req.Name, "namespace", req.Namespace)
@@ -108,7 +125,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, fmt.Errorf("patching score for %s/%s: %w", req.Namespace, req.Name, err)
 	}
 
+	if len(resp.Ranked) > 0 {
+		ScorePatchesTotal.WithLabelValues(domain, resp.Ranked[0].ClusterName).Inc()
+	}
+
 	r.LastWrittenScores.Store(req.NamespacedName.String(), newScore)
+	r.updateHandlesTracked()
 
 	log.Info("Updated preference score",
 		"handle", req.Name, "namespace", req.Namespace,
@@ -168,6 +190,14 @@ func (r *Reconciler) patchStatusPlacements(ctx context.Context, handle *unstruct
 
 	patch := []byte(fmt.Sprintf(`{"status":{"placements":%s}}`, placementsJSON))
 	return r.Status().Patch(ctx, handle, client.RawPatch(types.MergePatchType, patch))
+}
+
+// updateHandlesTracked counts entries in LastWrittenScores and sets the
+// handles-tracked gauge. Called after each successful score patch.
+func (r *Reconciler) updateHandlesTracked() {
+	var count int
+	r.LastWrittenScores.Range(func(_, _ any) bool { count++; return true })
+	HandlesTracked.WithLabelValues(r.Config.ClusterDomain).Set(float64(count))
 }
 
 // buildCandidates converts placements to scheduler candidates.
