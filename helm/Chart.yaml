@@ -5,8 +5,8 @@ description: |
   collects unbound ResourceHandles, calls the cluster-scheduler's
   /evaluate endpoint, and patches spec.preferenceScore on each handle.
 type: application
-version: 0.1.0
-appVersion: 0.1.0
+version: 0.1.1
+appVersion: 0.1.1
 keywords:
   - operator
   - poolboy
