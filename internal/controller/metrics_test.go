@@ -88,6 +88,19 @@ func TestSchedulerDurationObserve(t *testing.T) {
 	}
 }
 
+func TestSchedulerConsecutiveFailuresRegistered(t *testing.T) {
+	SchedulerConsecutiveFailures.WithLabelValues("test.local").Set(3)
+
+	families, err := metrics.Registry.Gather()
+	if err != nil {
+		t.Fatalf("Gather() error = %v", err)
+	}
+
+	if !findMetricFamily(families, "poolboy_scoring_scheduler_consecutive_failures") {
+		t.Error("poolboy_scoring_scheduler_consecutive_failures not found in registry")
+	}
+}
+
 func TestHandlesScoredRegistered(t *testing.T) {
 	HandlesScored.WithLabelValues("test.local", "test-pool").Set(42)
 

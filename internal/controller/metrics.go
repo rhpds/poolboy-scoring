@@ -36,6 +36,16 @@ var SchedulerDuration = prometheus.NewHistogramVec(
 	[]string{"cluster_domain"},
 )
 
+// SchedulerConsecutiveFailures tracks how many consecutive scheduler
+// /evaluate calls have failed without a success. Resets to 0 on success.
+var SchedulerConsecutiveFailures = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "poolboy_scoring_scheduler_consecutive_failures",
+		Help: "Consecutive scheduler /evaluate failures without a success",
+	},
+	[]string{"cluster_domain"},
+)
+
 // HandlesScored reports how many ResourceHandles were scored in the
 // most recent reconciliation of each pool.
 var HandlesScored = prometheus.NewGaugeVec(
@@ -51,6 +61,7 @@ func init() {
 		ReconcileTotal,
 		ScorePatchesTotal,
 		SchedulerDuration,
+		SchedulerConsecutiveFailures,
 		HandlesScored,
 	)
 }

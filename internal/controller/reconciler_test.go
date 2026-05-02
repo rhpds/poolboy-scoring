@@ -621,6 +621,71 @@ func TestReconcile_SchedulerError(t *testing.T) {
 	}
 }
 
+func TestReconcile_SchedulerCircuitBreaker(t *testing.T) {
+	pool := newTestPool("test-pool", 1, []map[string]interface{}{
+		handleEntry("handle-1", true),
+	})
+	handle := newTestHandle("handle-1")
+
+	resolver := newMockResolver()
+	resolver.placements["handle-1"] = []placement.Placement{{ClusterName: "ocpv06"}}
+	scorer := &mockScorer{err: fmt.Errorf("connection refused")}
+
+	c := fake.NewClientBuilder().WithObjects(pool, handle).Build()
+	r := newReconciler(c, scorer, resolver)
+
+	// First N-1 failures should requeue aggressively
+	for i := 0; i < maxConsecutiveSchedulerFailures-1; i++ {
+		res, err := r.Reconcile(context.Background(), poolRequest("test-pool"))
+		if err != nil {
+			t.Fatalf("iteration %d: unexpected error: %v", i, err)
+		}
+		if res.RequeueAfter == 0 {
+			t.Fatalf("iteration %d: expected RequeueAfter, got none", i)
+		}
+	}
+
+	// Nth failure should stop requeueing (circuit open)
+	res, err := r.Reconcile(context.Background(), poolRequest("test-pool"))
+	if err != nil {
+		t.Fatalf("circuit breaker: unexpected error: %v", err)
+	}
+	if res.RequeueAfter != 0 || res.Requeue {
+		t.Error("circuit breaker: expected no requeue after max failures")
+	}
+}
+
+func TestReconcile_SchedulerRecovery(t *testing.T) {
+	pool := newTestPool("test-pool", 1, []map[string]interface{}{
+		handleEntry("handle-1", true),
+	})
+	handle := newTestHandle("handle-1", withCachedPlacements("ocpv06"))
+
+	resolver := newMockResolver()
+	resolver.placements["handle-1"] = []placement.Placement{{ClusterName: "ocpv06"}}
+
+	scorer := &mockScorer{err: fmt.Errorf("connection refused")}
+	c := fake.NewClientBuilder().WithObjects(pool, handle).Build()
+	r := newReconciler(c, scorer, resolver)
+
+	// Accumulate some failures
+	for i := 0; i < 3; i++ {
+		r.Reconcile(context.Background(), poolRequest("test-pool"))
+	}
+	if r.schedulerFailures.Load() != 3 {
+		t.Fatalf("expected 3 failures, got %d", r.schedulerFailures.Load())
+	}
+
+	// Scheduler recovers
+	scorer.err = nil
+	scorer.response = defaultResponse("ocpv06")
+	r.Reconcile(context.Background(), poolRequest("test-pool"))
+
+	if r.schedulerFailures.Load() != 0 {
+		t.Errorf("expected failure counter reset to 0, got %d", r.schedulerFailures.Load())
+	}
+}
+
 func TestReconcile_HandleDeletedMidReconcile(t *testing.T) {
 	pool := newTestPool("test-pool", 2, []map[string]interface{}{
 		handleEntry("handle-exists", true),

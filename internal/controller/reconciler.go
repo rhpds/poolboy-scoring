@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -30,6 +31,8 @@ type handleWithCluster struct {
 	clusterName string
 }
 
+const maxConsecutiveSchedulerFailures = 5
+
 // ResourcePoolReconciler watches ResourcePool objects, collects unbound
 // handles not explicitly marked unhealthy, resolves their cluster placements,
 // sends one batch /evaluate call per pool, and patches each handle's
@@ -39,6 +42,8 @@ type ResourcePoolReconciler struct {
 	Scorer   scheduler.Scorer
 	Resolver PlacementResolver
 	Config   *config.Config
+
+	schedulerFailures atomic.Int32
 }
 
 // Reconcile processes a single ResourcePool.
@@ -116,6 +121,9 @@ func (r *ResourcePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 		placements, err := r.Resolver.Lookup(ctx, &handle)
 		if err != nil {
+			// Info, not Error: placement failures are transient (AnarchySubject
+			// not yet created, race between pool status and handle lifecycle).
+			// The placementFailed counter triggers RequeueAfter at the end.
 			log.Info("Failed to resolve placement, will retry",
 				"pool", req.Name, "handle", entry.Name, "error", err.Error())
 			placementFailed++
@@ -127,6 +135,16 @@ func (r *ResourcePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			continue
 		}
 
+		if len(placements) > 1 {
+			log.Info("Handle has multiple placements, using first only",
+				"pool", req.Name, "handle", entry.Name,
+				"placementCount", len(placements),
+				"selectedCluster", placements[0].ClusterName)
+		}
+
+		// Only the first placement is used. Multi-cluster handles are rare
+		// (<0.01% in production). If needed, this could iterate all placements
+		// and use the max score across clusters.
 		resolved = append(resolved, handleWithCluster{
 			handle:      handle.DeepCopy(),
 			clusterName: placements[0].ClusterName,
@@ -156,9 +174,34 @@ func (r *ResourcePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	ObserveSchedulerDuration(evalStart, domain)
 	if err != nil {
 		result = "error"
+		failures := r.schedulerFailures.Add(1)
+		SchedulerConsecutiveFailures.WithLabelValues(domain).Set(float64(failures))
+
+		if failures >= maxConsecutiveSchedulerFailures {
+			log.Error(err, "Scheduler unreachable, backing off to resync interval",
+				"pool", req.Name, "namespace", req.Namespace,
+				"consecutiveFailures", failures)
+			return ctrl.Result{}, nil
+		}
+
 		log.Error(err, "Scheduler evaluation failed, keeping existing scores",
-			"pool", req.Name, "namespace", req.Namespace)
+			"pool", req.Name, "namespace", req.Namespace,
+			"consecutiveFailures", failures)
 		return ctrl.Result{RequeueAfter: r.Config.RetryIntervalDuration()}, nil
+	}
+
+	if r.schedulerFailures.Load() > 0 {
+		log.Info("Scheduler recovered",
+			"pool", req.Name, "namespace", req.Namespace,
+			"previousFailures", r.schedulerFailures.Load())
+		r.schedulerFailures.Store(0)
+		SchedulerConsecutiveFailures.WithLabelValues(domain).Set(0)
+	}
+
+	if len(resp.Ranked) == 0 && len(resp.Excluded) == 0 {
+		log.Info("Scheduler returned empty response, no scores to apply",
+			"pool", req.Name, "namespace", req.Namespace,
+			"candidates", len(candidates))
 	}
 
 	if respJSON, err := json.Marshal(resp); err == nil {
