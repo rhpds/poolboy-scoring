@@ -266,8 +266,10 @@ git checkout main && git pull
 2. Run the version bump script:
 
 ```bash
-bash bump-version.sh           # auto-increments patch version (e.g., v0.1.0 → v0.1.1)
-bash bump-version.sh v0.2.0    # explicit version
+bash bump-version.sh                  # auto-increments patch version (e.g., v0.1.0 → v0.1.1)
+bash bump-version.sh v0.2.0           # explicit version
+bash bump-version.sh --dry-run        # preview what would happen without making changes
+bash bump-version.sh --dry-run v0.2.0 # preview with explicit version
 ```
 
 The script:
@@ -276,6 +278,8 @@ The script:
 - Checks that you're on the `main` branch (use `--dev` or `--force` to override)
 - Updates `version` and `appVersion` in `helm/Chart.yaml`
 - Commits (signed with `-S`), creates a git tag, and pushes both
+- On a fresh repo with no tags, auto-increment defaults to `v0.1.0`
+- Use `--dry-run` to preview the version bump without committing, tagging, or pushing
 
 3. GitHub Actions automatically builds a multi-arch container image (amd64 + arm64) and pushes it to `quay.io/rhpds/poolboy-scoring` with tags: `latest`, `vMAJOR.MINOR`, `vMAJOR.MINOR.PATCH`.
 

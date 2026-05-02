@@ -84,11 +84,13 @@ oc rollout restart deployment/poolboy-scoring    # required: running pod won't d
 ## Version bump
 
 ```bash
-bash bump-version.sh           # auto-increment patch (v0.1.0 → v0.1.1)
-bash bump-version.sh v0.2.0    # explicit version
+bash bump-version.sh                  # auto-increment patch (v0.1.0 → v0.1.1)
+bash bump-version.sh v0.2.0           # explicit version
+bash bump-version.sh --dry-run        # preview without making changes
+bash bump-version.sh --dry-run v0.2.0 # preview with explicit version
 ```
 
-Updates `version` and `appVersion` in `helm/Chart.yaml`, creates a signed commit and git tag, pushes both. Must be on `main` branch (use `--dev` or `--force` to override).
+Updates `version` and `appVersion` in `helm/Chart.yaml`, creates a signed commit and git tag, pushes both. Must be on `main` branch (use `--dev` or `--force` to override). On a fresh repo with no tags, auto-increment defaults to `v0.1.0`.
 
 ## CI/CD
 
