@@ -20,49 +20,77 @@ type Config struct {
 	ClusterSchedulerAPIKey string `envconfig:"CLUSTER_SCHEDULER_API_KEY" required:"true"`
 
 	// Cluster identity (used as Prometheus metric label)
-	ClusterDomain string `envconfig:"CLUSTER_DOMAIN" required:"true"`
+	ClusterDomain string `envconfig:"CLUSTER_DOMAIN" default:"babydev.dev.open.redhat.com"`
 
 	// Timing
 	ResyncInterval string `envconfig:"RESYNC_INTERVAL" default:"5m"`
 	ScoreTimeout   string `envconfig:"SCORE_TIMEOUT" default:"5s"`
+	RetryInterval  string `envconfig:"RETRY_INTERVAL" default:"30s"`
 
 	// Leader election
 	LeaderElection   bool   `envconfig:"LEADER_ELECTION" default:"true"`
 	LeaderElectionID string `envconfig:"LEADER_ELECTION_ID" default:"poolboy-scoring"`
 
-	// Metrics server
-	MetricsBindAddress string `envconfig:"METRICS_BIND_ADDRESS" default:":8080"`
-	MetricsUsername    string `envconfig:"METRICS_USERNAME" default:"metrics"`
-	MetricsPassword    string `envconfig:"METRICS_PASSWORD" required:"true"`
+	// Server bind addresses
+	HealthProbeBindAddress string `envconfig:"HEALTH_PROBE_BIND_ADDRESS" default:":8081"`
+	MetricsBindAddress     string `envconfig:"METRICS_BIND_ADDRESS" default:":9090"`
+	MetricsUsername        string `envconfig:"METRICS_USERNAME" default:"metrics"`
+	MetricsPassword        string `envconfig:"METRICS_PASSWORD" required:"true"`
+
+	// Operation mode
+	DryRun bool `envconfig:"DRY_RUN" default:"false"`
 
 	// Logging
 	Debug bool `envconfig:"DEBUG" default:"false"`
+
+	// Parsed durations (populated by Load, not from env vars)
+	resyncInterval time.Duration
+	scoreTimeout   time.Duration
+	retryInterval  time.Duration
 }
 
 // Load reads configuration from environment variables.
-// Returns an error if a required field is missing or a type conversion fails.
+// Returns an error if a required field is missing, a type conversion fails,
+// or a duration field has an invalid format.
 func Load() (*Config, error) {
 	var cfg Config
-	if err := envconfig.Process("", &cfg); err != nil {
+	var err error
+	if err = envconfig.Process("", &cfg); err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
+	}
+	cfg.resyncInterval, err = time.ParseDuration(cfg.ResyncInterval)
+	if err != nil {
+		return nil, fmt.Errorf("invalid RESYNC_INTERVAL %q: %w", cfg.ResyncInterval, err)
+	}
+	cfg.scoreTimeout, err = time.ParseDuration(cfg.ScoreTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("invalid SCORE_TIMEOUT %q: %w", cfg.ScoreTimeout, err)
+	}
+	cfg.retryInterval, err = time.ParseDuration(cfg.RetryInterval)
+	if err != nil {
+		return nil, fmt.Errorf("invalid RETRY_INTERVAL %q: %w", cfg.RetryInterval, err)
 	}
 	return &cfg, nil
 }
 
-// ScoreTimeoutDuration parses the ScoreTimeout string (e.g. "5s") into a time.Duration.
-func (c *Config) ScoreTimeoutDuration() time.Duration {
-	d, err := time.ParseDuration(c.ScoreTimeout)
+// NewForTest creates a Config with the given retryInterval string, suitable for
+// use in tests outside the config package. Panics on invalid duration.
+func NewForTest(retryInterval string) (*Config, error) {
+	d, err := time.ParseDuration(retryInterval)
 	if err != nil {
-		return 5 * time.Second
+		return nil, fmt.Errorf("invalid retry interval %q: %w", retryInterval, err)
 	}
-	return d
+	return &Config{
+		RetryInterval: retryInterval,
+		retryInterval: d,
+	}, nil
 }
 
-// ResyncIntervalDuration parses the ResyncInterval string (e.g. "5m") into a time.Duration.
-func (c *Config) ResyncIntervalDuration() time.Duration {
-	d, err := time.ParseDuration(c.ResyncInterval)
-	if err != nil {
-		return 5 * time.Minute
-	}
-	return d
-}
+// ScoreTimeoutDuration returns the parsed ScoreTimeout duration.
+func (c *Config) ScoreTimeoutDuration() time.Duration { return c.scoreTimeout }
+
+// ResyncIntervalDuration returns the parsed ResyncInterval duration.
+func (c *Config) ResyncIntervalDuration() time.Duration { return c.resyncInterval }
+
+// RetryIntervalDuration returns the parsed RetryInterval duration.
+func (c *Config) RetryIntervalDuration() time.Duration { return c.retryInterval }

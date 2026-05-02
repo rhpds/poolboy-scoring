@@ -1,0 +1,80 @@
+{{- if .Values.deploy -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "poolboyScoring.name" . }}
+  labels:
+    {{- include "poolboyScoring.labels" . | nindent 4 }}
+rules:
+  # ResourcePools — informer triggers pool-level reconciliation
+  - apiGroups:
+      - poolboy.gpte.redhat.com
+    resources:
+      - resourcepools
+    verbs:
+      - get
+      - list
+      - watch
+  # ResourceHandles — read all handles, patch spec.preferenceScore
+  - apiGroups:
+      - poolboy.gpte.redhat.com
+    resources:
+      - resourcehandles
+    verbs:
+      - get
+      - list
+      - watch
+      - patch
+  # ResourceHandles/status — patch status.placements (separate K8s API path)
+  - apiGroups:
+      - poolboy.gpte.redhat.com
+    resources:
+      - resourcehandles/status
+    verbs:
+      - patch
+  # AnarchySubjects — single GET per handle to resolve cluster placement
+  - apiGroups:
+      - anarchy.gpte.redhat.com
+    resources:
+      - anarchysubjects
+    verbs:
+      - get
+  # Leader election — controller-runtime uses Leases for leader election
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - update
+      - watch
+  # Events — controller-runtime records events on resources
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - get
+      - list
+      - patch
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "poolboyScoring.name" . }}
+  labels:
+    {{- include "poolboyScoring.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "poolboyScoring.name" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "poolboyScoring.serviceAccountName" . }}
+    namespace: {{ include "poolboyScoring.namespaceName" . }}
+{{- end -}}

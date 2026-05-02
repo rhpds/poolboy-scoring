@@ -1,0 +1,49 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  annotations:
+    description: Poolboy Scoring Build
+  name: poolboy-scoring-build
+
+parameters:
+  - name: NAME
+    value: poolboy-scoring
+
+objects:
+  - apiVersion: image.openshift.io/v1
+    kind: ImageStream
+    metadata:
+      name: ${NAME}
+      labels:
+        app: ${NAME}
+        build: ${NAME}-build
+        component: build
+    spec:
+      lookupPolicy:
+        local: true
+
+  - apiVersion: build.openshift.io/v1
+    kind: BuildConfig
+    metadata:
+      name: ${NAME}
+      labels:
+        app: ${NAME}
+        build: ${NAME}-build
+        component: build
+    spec:
+      output:
+        to:
+          kind: ImageStreamTag
+          name: ${NAME}:latest
+      runPolicy: Serial
+      source:
+        type: Binary
+        binary: {}
+      successfulBuildsHistoryLimit: 1
+      failedBuildsHistoryLimit: 1
+      strategy:
+        type: Docker
+        dockerStrategy:
+          dockerfilePath: Containerfile
+          imageOptimizationPolicy: SkipLayers
+      triggers: []

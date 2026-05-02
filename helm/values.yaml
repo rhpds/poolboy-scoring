@@ -1,0 +1,107 @@
+deploy: false
+version: main
+replicaCount: 2
+
+# --- Application Configuration ---
+# Settings most likely to change between environments.
+
+clusterDomain: babydev.dev.open.redhat.com
+debug: false
+
+# Cluster Scheduler
+clusterScheduler:
+  url: http://cluster-scheduler.cluster-scheduler.svc.cluster.local:8080
+
+# Timing
+# resyncInterval: how often the controller re-lists all ResourcePools
+#   and reconciles every unbound handle (even if nothing changed).
+resyncInterval: "5m"
+# scoreTimeout: max time to wait for the /evaluate API call to the
+#   cluster-scheduler before giving up and retrying.
+scoreTimeout: "5s"
+# retryInterval: how long to wait before retrying a handle that
+#   failed scoring (e.g., scheduler unreachable, transient error).
+retryInterval: "30s"
+
+# Operation mode
+dryRun: false
+
+# Leader election
+leaderElection:
+  enabled: true
+  id: "poolboy-scoring"
+
+# Prometheus metrics
+metrics:
+  enabled: true
+  port: 9090
+  username: "metrics"
+
+# Health probes
+healthProbeBindAddress: ":8081"
+
+# Bitwarden secrets
+secrets:
+  schedulerApiKey: "cluster-scheduler-api-key-poolboy"
+
+# Extra env vars (injected into ConfigMap)
+extraEnv: []
+
+# --- Infrastructure Configuration ---
+
+namespace:
+  create: false
+  name: poolboy-scoring
+
+image:
+  repository: quay.io/rhpds/poolboy-scoring
+  pullPolicy: Always
+  tagOverride: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name:
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# Pod-level security context.
+# On OpenShift, do NOT set runAsUser/runAsGroup — the restricted-v2 SCC
+# assigns a UID from the namespace range automatically.
+podSecurityContext:
+  runAsNonRoot: true
+
+# Container-level security context.
+# These settings are compatible with OpenShift's restricted-v2 SCC.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+
+# Pod scheduling affinity rules.
+# Default: soft anti-affinity spreads replicas across nodes.
+# Set to {} to disable, or customize for your topology.
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: poolboy-scoring
+          topologyKey: kubernetes.io/hostname

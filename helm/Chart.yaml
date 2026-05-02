@@ -1,0 +1,20 @@
+apiVersion: v2
+name: poolboy-scoring
+description: |
+  Go-based scoring controller that watches Poolboy ResourcePools,
+  collects unbound ResourceHandles, calls the cluster-scheduler's
+  /evaluate endpoint, and patches spec.preferenceScore on each handle.
+type: application
+version: 0.1.0
+appVersion: 0.1.0
+keywords:
+  - operator
+  - poolboy
+  - scoring
+  - controller-runtime
+home: https://github.com/rhpds/poolboy-scoring
+sources:
+  - https://github.com/rhpds/poolboy-scoring
+maintainers:
+  - name: Marcos Amorim
+    email: mamorim@redhat.com
