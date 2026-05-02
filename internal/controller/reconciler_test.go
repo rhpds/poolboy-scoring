@@ -63,9 +63,11 @@ func (m *mockResolver) Lookup(_ context.Context, handle *unstructured.Unstructur
 // --- Test helpers ---
 
 func testConfig() *config.Config {
-	return &config.Config{
-		RetryInterval: "30s",
+	cfg, err := config.NewForTest("30s")
+	if err != nil {
+		panic(fmt.Sprintf("testConfig: %v", err))
 	}
+	return cfg
 }
 
 func newTestPool(name string, available int64, handles []map[string]interface{}) *unstructured.Unstructured {

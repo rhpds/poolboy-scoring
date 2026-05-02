@@ -30,7 +30,13 @@ func main() {
 	opts := zap.Options{Development: cfg.Debug}
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	if err := run(ctrl.SetupSignalHandler(), cfg, ctrl.GetConfigOrDie()); err != nil {
+	restCfg, err := ctrl.GetConfig()
+	if err != nil {
+		ctrl.Log.WithName("setup").Error(err, "Failed to load kubeconfig")
+		os.Exit(1)
+	}
+
+	if err := run(ctrl.SetupSignalHandler(), cfg, restCfg); err != nil {
 		ctrl.Log.WithName("setup").Error(err, "Controller exited with error")
 		os.Exit(1)
 	}

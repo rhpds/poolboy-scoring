@@ -89,7 +89,7 @@ func TestSchedulerDurationObserve(t *testing.T) {
 }
 
 func TestHandlesScoredRegistered(t *testing.T) {
-	HandlesScored.WithLabelValues("test.local").Set(42)
+	HandlesScored.WithLabelValues("test.local", "test-pool").Set(42)
 
 	families, err := metrics.Registry.Gather()
 	if err != nil {
@@ -100,7 +100,7 @@ func TestHandlesScoredRegistered(t *testing.T) {
 		t.Error("poolboy_scoring_handles_scored not found in registry")
 	}
 
-	gauge, err := HandlesScored.GetMetricWithLabelValues("test.local")
+	gauge, err := HandlesScored.GetMetricWithLabelValues("test.local", "test-pool")
 	if err != nil {
 		t.Fatalf("failed to get metric: %v", err)
 	}

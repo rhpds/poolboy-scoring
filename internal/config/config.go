@@ -42,6 +42,11 @@ type Config struct {
 
 	// Logging
 	Debug bool `envconfig:"DEBUG" default:"false"`
+
+	// Parsed durations (populated by Load, not from env vars)
+	resyncInterval time.Duration
+	scoreTimeout   time.Duration
+	retryInterval  time.Duration
 }
 
 // Load reads configuration from environment variables.
@@ -49,44 +54,43 @@ type Config struct {
 // or a duration field has an invalid format.
 func Load() (*Config, error) {
 	var cfg Config
-	if err := envconfig.Process("", &cfg); err != nil {
+	var err error
+	if err = envconfig.Process("", &cfg); err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
-	if _, err := time.ParseDuration(cfg.ResyncInterval); err != nil {
+	cfg.resyncInterval, err = time.ParseDuration(cfg.ResyncInterval)
+	if err != nil {
 		return nil, fmt.Errorf("invalid RESYNC_INTERVAL %q: %w", cfg.ResyncInterval, err)
 	}
-	if _, err := time.ParseDuration(cfg.ScoreTimeout); err != nil {
+	cfg.scoreTimeout, err = time.ParseDuration(cfg.ScoreTimeout)
+	if err != nil {
 		return nil, fmt.Errorf("invalid SCORE_TIMEOUT %q: %w", cfg.ScoreTimeout, err)
 	}
-	if _, err := time.ParseDuration(cfg.RetryInterval); err != nil {
+	cfg.retryInterval, err = time.ParseDuration(cfg.RetryInterval)
+	if err != nil {
 		return nil, fmt.Errorf("invalid RETRY_INTERVAL %q: %w", cfg.RetryInterval, err)
 	}
 	return &cfg, nil
 }
 
-// ScoreTimeoutDuration parses the ScoreTimeout string (e.g. "5s") into a time.Duration.
-func (c *Config) ScoreTimeoutDuration() time.Duration {
-	d, err := time.ParseDuration(c.ScoreTimeout)
+// NewForTest creates a Config with the given retryInterval string, suitable for
+// use in tests outside the config package. Panics on invalid duration.
+func NewForTest(retryInterval string) (*Config, error) {
+	d, err := time.ParseDuration(retryInterval)
 	if err != nil {
-		return 5 * time.Second
+		return nil, fmt.Errorf("invalid retry interval %q: %w", retryInterval, err)
 	}
-	return d
+	return &Config{
+		RetryInterval: retryInterval,
+		retryInterval: d,
+	}, nil
 }
 
-// ResyncIntervalDuration parses the ResyncInterval string (e.g. "5m") into a time.Duration.
-func (c *Config) ResyncIntervalDuration() time.Duration {
-	d, err := time.ParseDuration(c.ResyncInterval)
-	if err != nil {
-		return 5 * time.Minute
-	}
-	return d
-}
+// ScoreTimeoutDuration returns the parsed ScoreTimeout duration.
+func (c *Config) ScoreTimeoutDuration() time.Duration { return c.scoreTimeout }
 
-// RetryIntervalDuration parses the RetryInterval string (e.g. "30s") into a time.Duration.
-func (c *Config) RetryIntervalDuration() time.Duration {
-	d, err := time.ParseDuration(c.RetryInterval)
-	if err != nil {
-		return 30 * time.Second
-	}
-	return d
-}
+// ResyncIntervalDuration returns the parsed ResyncInterval duration.
+func (c *Config) ResyncIntervalDuration() time.Duration { return c.resyncInterval }
+
+// RetryIntervalDuration returns the parsed RetryInterval duration.
+func (c *Config) RetryIntervalDuration() time.Duration { return c.retryInterval }

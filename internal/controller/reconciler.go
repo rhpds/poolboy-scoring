@@ -31,8 +31,9 @@ type handleWithCluster struct {
 }
 
 // ResourcePoolReconciler watches ResourcePool objects, collects unbound
-// healthy handles, resolves their cluster placements, sends one batch
-// /evaluate call per pool, and patches each handle's spec.preferenceScore.
+// handles not explicitly marked unhealthy, resolves their cluster placements,
+// sends one batch /evaluate call per pool, and patches each handle's
+// spec.preferenceScore.
 type ResourcePoolReconciler struct {
 	client.Client
 	Scorer   scheduler.Scorer
@@ -253,7 +254,7 @@ func (r *ResourcePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		)
 	}
 
-	HandlesScored.WithLabelValues(domain).Set(float64(scored))
+	HandlesScored.WithLabelValues(domain, req.Name).Set(float64(scored))
 
 	log.Info("Pool reconciliation complete",
 		"pool", req.Name, "namespace", req.Namespace,

@@ -144,11 +144,11 @@ if apierrors.IsConflict(err) {
 
 ### Scheduler errors
 
-Info-level log + `RequeueAfter`. Existing scores persist — stale scores are better than no scores:
+Error-level log + `RequeueAfter`. Existing scores persist — stale scores are better than no scores. Use `log.Error` so monitoring systems can alert on persistent scheduler failures:
 
 ```go
-log.Info("Scheduler evaluation failed, keeping existing scores",
-    "pool", req.Name, "namespace", req.Namespace, "error", err.Error())
+log.Error(err, "Scheduler evaluation failed, keeping existing scores",
+    "pool", req.Name, "namespace", req.Namespace)
 return ctrl.Result{RequeueAfter: r.Config.RetryIntervalDuration()}, nil
 ```
 
@@ -185,7 +185,7 @@ Uses `logr/zap` via controller-runtime. Two levels:
 
 - Score updates: "Updated preference score" with old/new values
 - Pool reconciliation summary: "Pool reconciliation complete" with handle counts
-- Transient failures: "Scheduler evaluation failed", "Conflict patching score"
+- Transient failures: "Conflict patching score"
 
 **V(1)/Debug** (enabled with `DEBUG=true`): Operational details
 
@@ -193,10 +193,13 @@ Uses `logr/zap` via controller-runtime. Two levels:
 - API calls: "Calling /evaluate" with cluster list, "Evaluate response" with full JSON
 - No-ops: events where nothing changed
 
+**Error** for:
+
+- Scheduler failures (timeouts, bad response) — needs operator visibility
+
 **Never Error** for:
 
 - 409 Conflict (expected concurrency)
-- Scheduler timeouts (transient)
 - AnarchySubject not found (handle may be in transition)
 
 Log key-value pairs use consistent naming: `pool`, `handle`, `cluster`, `namespace`, `error`, `oldPreferenceScore`, `newPreferenceScore`.

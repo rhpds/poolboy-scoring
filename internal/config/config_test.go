@@ -179,21 +179,19 @@ func TestLoad_InvalidDuration(t *testing.T) {
 func TestScoreTimeoutDuration(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    string
-		expected time.Duration
+		duration time.Duration
 	}{
-		{"valid 5s", "5s", 5 * time.Second},
-		{"valid 10s", "10s", 10 * time.Second},
-		{"valid 500ms", "500ms", 500 * time.Millisecond},
-		{"invalid falls back to 5s", "not-a-duration", 5 * time.Second},
+		{"5s", 5 * time.Second},
+		{"10s", 10 * time.Second},
+		{"500ms", 500 * time.Millisecond},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			cfg := &Config{ScoreTimeout: tc.input}
+			cfg := &Config{scoreTimeout: tc.duration}
 			got := cfg.ScoreTimeoutDuration()
-			if got != tc.expected {
-				t.Errorf("ScoreTimeoutDuration() = %v, want %v", got, tc.expected)
+			if got != tc.duration {
+				t.Errorf("ScoreTimeoutDuration() = %v, want %v", got, tc.duration)
 			}
 		})
 	}
@@ -202,21 +200,19 @@ func TestScoreTimeoutDuration(t *testing.T) {
 func TestRetryIntervalDuration(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    string
-		expected time.Duration
+		duration time.Duration
 	}{
-		{"valid 30s", "30s", 30 * time.Second},
-		{"valid 15s", "15s", 15 * time.Second},
-		{"valid 1m", "1m", 1 * time.Minute},
-		{"invalid falls back to 30s", "not-a-duration", 30 * time.Second},
+		{"30s", 30 * time.Second},
+		{"15s", 15 * time.Second},
+		{"1m", 1 * time.Minute},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			cfg := &Config{RetryInterval: tc.input}
+			cfg := &Config{retryInterval: tc.duration}
 			got := cfg.RetryIntervalDuration()
-			if got != tc.expected {
-				t.Errorf("RetryIntervalDuration() = %v, want %v", got, tc.expected)
+			if got != tc.duration {
+				t.Errorf("RetryIntervalDuration() = %v, want %v", got, tc.duration)
 			}
 		})
 	}
@@ -225,21 +221,19 @@ func TestRetryIntervalDuration(t *testing.T) {
 func TestResyncIntervalDuration(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    string
-		expected time.Duration
+		duration time.Duration
 	}{
-		{"valid 5m", "5m", 5 * time.Minute},
-		{"valid 10m", "10m", 10 * time.Minute},
-		{"valid 30s", "30s", 30 * time.Second},
-		{"invalid falls back to 5m", "not-a-duration", 5 * time.Minute},
+		{"5m", 5 * time.Minute},
+		{"10m", 10 * time.Minute},
+		{"30s", 30 * time.Second},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			cfg := &Config{ResyncInterval: tc.input}
+			cfg := &Config{resyncInterval: tc.duration}
 			got := cfg.ResyncIntervalDuration()
-			if got != tc.expected {
-				t.Errorf("ResyncIntervalDuration() = %v, want %v", got, tc.expected)
+			if got != tc.duration {
+				t.Errorf("ResyncIntervalDuration() = %v, want %v", got, tc.duration)
 			}
 		})
 	}

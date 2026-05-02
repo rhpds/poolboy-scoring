@@ -2,6 +2,7 @@ package placement
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -68,7 +69,7 @@ func (p *PlacementLookup) resolveFromAnarchySubjects(ctx context.Context, handle
 	}
 
 	var placements []Placement
-	var lastErr error
+	var errs []error
 
 	for _, ref := range refs {
 		var subject unstructured.Unstructured
@@ -79,22 +80,22 @@ func (p *PlacementLookup) resolveFromAnarchySubjects(ctx context.Context, handle
 			Namespace: ref.Namespace,
 		}, &subject)
 		if err != nil {
-			lastErr = fmt.Errorf("fetching AnarchySubject %s/%s for handle %s/%s: %w",
-				ref.Namespace, ref.Name, handle.GetNamespace(), handle.GetName(), err)
+			errs = append(errs, fmt.Errorf("fetching AnarchySubject %s/%s for handle %s/%s: %w",
+				ref.Namespace, ref.Name, handle.GetNamespace(), handle.GetName(), err))
 			continue
 		}
 
 		spec, err := ParseAnarchySubjectSpec(&subject)
 		if err != nil {
-			lastErr = fmt.Errorf("parsing AnarchySubject %s/%s spec: %w",
-				ref.Namespace, ref.Name, err)
+			errs = append(errs, fmt.Errorf("parsing AnarchySubject %s/%s spec: %w",
+				ref.Namespace, ref.Name, err))
 			continue
 		}
 
 		placement, err := ExtractPlacement(spec, subject.GetName())
 		if err != nil {
-			lastErr = fmt.Errorf("extracting placement from AnarchySubject %s/%s: %w",
-				ref.Namespace, ref.Name, err)
+			errs = append(errs, fmt.Errorf("extracting placement from AnarchySubject %s/%s: %w",
+				ref.Namespace, ref.Name, err))
 			continue
 		}
 
@@ -102,8 +103,8 @@ func (p *PlacementLookup) resolveFromAnarchySubjects(ctx context.Context, handle
 	}
 
 	if len(placements) == 0 {
-		if lastErr != nil {
-			return nil, lastErr
+		if len(errs) > 0 {
+			return nil, errors.Join(errs...)
 		}
 		return nil, nil
 	}

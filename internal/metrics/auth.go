@@ -19,14 +19,15 @@ import (
 // Kubernetes RBAC-based filter, not by basicAuth).
 func BasicAuthFilterProvider(username, password string) func(*rest.Config, *http.Client) (metricsserver.Filter, error) {
 	return func(_ *rest.Config, _ *http.Client) (metricsserver.Filter, error) {
-		return func(_ logr.Logger, handler http.Handler) (http.Handler, error) {
+		return func(log logr.Logger, handler http.Handler) (http.Handler, error) {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				u, p, ok := r.BasicAuth()
 				userMatch := subtle.ConstantTimeCompare([]byte(u), []byte(username)) == 1
 				passMatch := subtle.ConstantTimeCompare([]byte(p), []byte(password)) == 1
 				if !ok || !userMatch || !passMatch {
+					log.Info("Metrics auth failed", "remote", r.RemoteAddr)
 					w.Header().Set("WWW-Authenticate", `Basic realm="metrics"`)
-					w.WriteHeader(http.StatusUnauthorized)
+					http.Error(w, "Unauthorized", http.StatusUnauthorized)
 					return
 				}
 				handler.ServeHTTP(w, r)
