@@ -104,7 +104,7 @@ func TestExtractPlacement(t *testing.T) {
 			},
 		},
 		{
-			name: "missing sandbox_openshift_cluster",
+			name: "missing sandbox_openshift_cluster — not applicable, returns nil",
 			spec: &AnarchySubjectSpec{
 				Vars: &AnarchySubjectVars{
 					JobVars: map[string]interface{}{
@@ -115,36 +115,55 @@ func TestExtractPlacement(t *testing.T) {
 				},
 			},
 			subjectName: "agd-v2.openshift-ai-v3-aws-vzrjg",
-			wantErr:     true,
 		},
 		{
-			name: "empty job_vars map",
+			name: "empty job_vars map — not applicable, returns nil",
 			spec: &AnarchySubjectSpec{
 				Vars: &AnarchySubjectVars{
 					JobVars: map[string]interface{}{},
 				},
 			},
 			subjectName: "some-subject",
-			wantErr:     true,
 		},
 		{
-			name: "missing job_vars entirely",
+			name: "missing job_vars entirely — not applicable, returns nil",
 			spec: &AnarchySubjectSpec{
 				Vars: &AnarchySubjectVars{},
 			},
 			subjectName: "some-subject",
-			wantErr:     true,
 		},
 		{
-			name:        "missing spec.vars entirely",
+			name:        "missing spec.vars entirely — not applicable, returns nil",
 			spec:        &AnarchySubjectSpec{},
 			subjectName: "some-subject",
+		},
+		{
+			name:        "nil spec — not applicable, returns nil",
+			spec:        nil,
+			subjectName: "some-subject",
+		},
+		{
+			name: "sandbox_openshift_cluster present but empty string",
+			spec: &AnarchySubjectSpec{
+				Vars: &AnarchySubjectVars{
+					JobVars: map[string]interface{}{
+						"sandbox_openshift_cluster": "",
+					},
+				},
+			},
+			subjectName: "subject-with-empty-cluster",
 			wantErr:     true,
 		},
 		{
-			name:        "nil spec",
-			spec:        nil,
-			subjectName: "some-subject",
+			name: "sandbox_openshift_cluster present but wrong type",
+			spec: &AnarchySubjectSpec{
+				Vars: &AnarchySubjectVars{
+					JobVars: map[string]interface{}{
+						"sandbox_openshift_cluster": 42,
+					},
+				},
+			},
+			subjectName: "subject-with-int-cluster",
 			wantErr:     true,
 		},
 	}
@@ -155,6 +174,9 @@ func TestExtractPlacement(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ExtractPlacement() error = %v, wantErr %v", err, tt.wantErr)
 				return
+			}
+			if tt.want == nil && got != nil {
+				t.Errorf("ExtractPlacement() = %+v, want nil", *got)
 			}
 			if tt.want != nil {
 				if got == nil {

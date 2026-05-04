@@ -98,6 +98,9 @@ func (p *PlacementLookup) resolveFromAnarchySubjects(ctx context.Context, handle
 				ref.Namespace, ref.Name, err))
 			continue
 		}
+		if placement == nil {
+			continue
+		}
 
 		placements = append(placements, *placement)
 	}

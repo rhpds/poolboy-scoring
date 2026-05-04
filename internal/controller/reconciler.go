@@ -121,10 +121,11 @@ func (r *ResourcePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 		placements, err := r.Resolver.Lookup(ctx, &handle)
 		if err != nil {
-			// Info, not Error: placement failures are transient (AnarchySubject
+			// V(1): remaining placement errors are transient (AnarchySubject
 			// not yet created, race between pool status and handle lifecycle).
-			// The placementFailed counter triggers RequeueAfter at the end.
-			log.Info("Failed to resolve placement, will retry",
+			// Non-applicable handles (no sandbox_openshift_cluster) return
+			// nil before reaching this point.
+			log.V(1).Info("Failed to resolve placement, will retry",
 				"pool", req.Name, "handle", entry.Name, "error", err.Error())
 			placementFailed++
 			continue
@@ -199,9 +200,9 @@ func (r *ResourcePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	if len(resp.Ranked) == 0 && len(resp.Excluded) == 0 {
-		log.Info("Scheduler returned empty response, no scores to apply",
-			"pool", req.Name, "namespace", req.Namespace,
-			"candidates", len(candidates))
+		log.Error(fmt.Errorf("empty response from scheduler with %d candidates", len(candidates)),
+			"Scheduler returned empty response, no scores to apply",
+			"pool", req.Name, "namespace", req.Namespace)
 	}
 
 	if respJSON, err := json.Marshal(resp); err == nil {

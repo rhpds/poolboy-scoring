@@ -25,17 +25,19 @@ func ParseAnarchySubjectSpec(obj *unstructured.Unstructured) (*AnarchySubjectSpe
 }
 
 // ExtractPlacement reads sandbox_openshift_* fields from a parsed
-// AnarchySubjectSpec's job_vars. Returns an error if sandbox_openshift_cluster
-// is missing or empty.
+// AnarchySubjectSpec's job_vars. Returns (nil, nil) when the subject
+// has no sandbox_openshift_cluster — this is normal for non-CNV workloads
+// (AWS, RHEL, etc.) and is not an error. Returns an error only for
+// malformed data (cluster key present but empty).
 func ExtractPlacement(spec *AnarchySubjectSpec, subjectName string) (*Placement, error) {
 	if spec == nil || spec.Vars == nil || spec.Vars.JobVars == nil {
-		return nil, fmt.Errorf("spec.vars.job_vars not found in AnarchySubject %s", subjectName)
+		return nil, nil
 	}
 	jobVars := spec.Vars.JobVars
 
 	clusterRaw, ok := jobVars["sandbox_openshift_cluster"]
 	if !ok {
-		return nil, fmt.Errorf("sandbox_openshift_cluster not found in job_vars of AnarchySubject %s", subjectName)
+		return nil, nil
 	}
 	clusterName, ok := clusterRaw.(string)
 	if !ok || clusterName == "" {

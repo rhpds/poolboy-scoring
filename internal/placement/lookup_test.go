@@ -178,7 +178,7 @@ func TestLookup(t *testing.T) {
 			},
 		},
 		{
-			name: "no sandbox_openshift_cluster in job_vars — returns error",
+			name: "no sandbox_openshift_cluster in job_vars — not applicable, returns nil",
 			handle: handleWithResources(
 				anarchySubjectRef("rhel-vm", "babylon-anarchy-0"),
 			),
@@ -188,8 +188,7 @@ func TestLookup(t *testing.T) {
 					"aws_region":     "us-east-2",
 				}),
 			},
-			want:    nil,
-			wantErr: true,
+			want: nil,
 		},
 		{
 			name: "all AnarchySubjects not found — returns error",
