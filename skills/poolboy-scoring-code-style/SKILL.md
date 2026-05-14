@@ -40,8 +40,8 @@ type Placement struct {
 
 // Cluster-scheduler API fields — snake_case
 type Candidate struct {
-    ClusterName string  `json:"cluster_name"`
-    HandleName  *string `json:"handle_name,omitempty"`
+    Name       string  `json:"name"`
+    HandleName *string `json:"handle_name,omitempty"`
 }
 ```
 

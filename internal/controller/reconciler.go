@@ -163,7 +163,7 @@ func (r *ResourcePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	uniqueClusters := deduplicateClusters(resolved)
 	candidates := make([]scheduler.Candidate, len(uniqueClusters))
 	for i, c := range uniqueClusters {
-		candidates[i] = scheduler.Candidate{ClusterName: c}
+		candidates[i] = scheduler.Candidate{Name: c}
 	}
 
 	log.V(1).Info("Calling /evaluate",
@@ -361,7 +361,7 @@ func deduplicateClusters(handles []handleWithCluster) []string {
 func buildScoreMap(resp *scheduler.EvaluateResponse) map[string]float64 {
 	m := make(map[string]float64, len(resp.Ranked))
 	for _, sc := range resp.Ranked {
-		m[sc.ClusterName] = sc.Score
+		m[sc.Name] = sc.Score
 	}
 	return m
 }
@@ -370,7 +370,7 @@ func buildScoreMap(resp *scheduler.EvaluateResponse) map[string]float64 {
 func buildExcludedSet(resp *scheduler.EvaluateResponse) map[string]bool {
 	m := make(map[string]bool, len(resp.Excluded))
 	for _, sc := range resp.Excluded {
-		m[sc.ClusterName] = true
+		m[sc.Name] = true
 	}
 	return m
 }

@@ -52,20 +52,20 @@ Key relationships:
    - Cached `status.placements` (written by the controller on previous runs)
    - `provision_data` shortcut (some catalog items propagate placement here)
    - AnarchySubject GET (extract `sandbox_openshift_cluster` from `spec.vars.job_vars`)
-4. **Calls** cluster-scheduler `POST /api/v1/evaluate` with ALL unique clusters as candidates (one call per pool)
+4. **Calls** cluster-scheduler `POST /api/v1/evaluate/clusters` with ALL unique clusters as candidates (one call per pool)
 5. **Patches** `spec.preferenceScore` on each handle with its cluster's score
 6. **Poolboy** reads `preferenceScore` at bind time (tier 6 in the 7-tier sort)
 
-## Cluster-scheduler /evaluate API
+## Cluster-scheduler /evaluate/clusters API
 
 Request:
 
 ```json
 {
   "candidates": [
-    { "cluster_name": "ocpv06" },
-    { "cluster_name": "ocpv05" },
-    { "cluster_name": "ocpv10" }
+    { "name": "ocpv06" },
+    { "name": "ocpv05" },
+    { "name": "ocpv10" }
   ]
 }
 ```
@@ -75,9 +75,9 @@ Response:
 ```json
 {
   "ranked": [
-    { "cluster_name": "ocpv06", "score": 73.69, "eligible": true },
-    { "cluster_name": "ocpv05", "score": 65.58, "eligible": true },
-    { "cluster_name": "ocpv10", "score": 34.44, "eligible": true }
+    { "name": "ocpv06", "score": 73.69, "scores": {"cpu": 90.0, "memory": 75.0}, "eligible": true },
+    { "name": "ocpv05", "score": 65.58, "scores": {"cpu": 70.0, "memory": 60.0}, "eligible": true },
+    { "name": "ocpv10", "score": 34.44, "scores": {"cpu": 40.0, "memory": 30.0}, "eligible": true }
   ],
   "excluded": [],
   "strategy": "most_capacity",

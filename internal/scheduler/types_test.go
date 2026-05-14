@@ -22,26 +22,26 @@ func TestCandidate_MarshalJSON(t *testing.T) {
 		{
 			name: "all fields present",
 			input: Candidate{
-				ClusterName:     "ocpv05",
+				Name:            "ocpv05",
 				HandleName:      stringPtr("abc12-98dab931"),
 				HandleNamespace: stringPtr("sandbox-abc12-ocp4-cluster"),
 			},
-			expected: `{"cluster_name":"ocpv05","handle_name":"abc12-98dab931","handle_namespace":"sandbox-abc12-ocp4-cluster"}`,
+			expected: `{"name":"ocpv05","handle_name":"abc12-98dab931","handle_namespace":"sandbox-abc12-ocp4-cluster"}`,
 		},
 		{
-			name: "only cluster_name",
+			name: "only name",
 			input: Candidate{
-				ClusterName: "ocpv06",
+				Name: "ocpv06",
 			},
-			expected: `{"cluster_name":"ocpv06"}`,
+			expected: `{"name":"ocpv06"}`,
 		},
 		{
 			name: "handle_name without handle_namespace",
 			input: Candidate{
-				ClusterName: "ocpv07",
-				HandleName:  stringPtr("def34-04fa8c6b"),
+				Name:       "ocpv07",
+				HandleName: stringPtr("def34-04fa8c6b"),
 			},
-			expected: `{"cluster_name":"ocpv07","handle_name":"def34-04fa8c6b"}`,
+			expected: `{"name":"ocpv07","handle_name":"def34-04fa8c6b"}`,
 		},
 	}
 
@@ -61,8 +61,8 @@ func TestCandidate_MarshalJSON(t *testing.T) {
 func TestEvaluateRequest_MarshalJSON(t *testing.T) {
 	req := EvaluateRequest{
 		Candidates: []Candidate{
-			{ClusterName: "ocpv05", HandleName: stringPtr("abc12")},
-			{ClusterName: "ocpv06"},
+			{Name: "ocpv05", HandleName: stringPtr("abc12")},
+			{Name: "ocpv06"},
 		},
 	}
 
@@ -71,7 +71,7 @@ func TestEvaluateRequest_MarshalJSON(t *testing.T) {
 		t.Fatalf("json.Marshal() error: %v", err)
 	}
 
-	expected := `{"candidates":[{"cluster_name":"ocpv05","handle_name":"abc12"},{"cluster_name":"ocpv06"}]}`
+	expected := `{"candidates":[{"name":"ocpv05","handle_name":"abc12"},{"name":"ocpv06"}]}`
 	if string(got) != expected {
 		t.Errorf("json.Marshal() =\n  %s\nwant:\n  %s", string(got), expected)
 	}
@@ -88,7 +88,7 @@ func TestScoredCandidate_UnmarshalJSON(t *testing.T) {
 	}{
 		{
 			name:             "eligible candidate",
-			input:            `{"cluster_name":"ocpv05","handle_name":"abc12","score":82.5,"eligible":true}`,
+			input:            `{"name":"ocpv05","handle_name":"abc12","score":82.5,"eligible":true}`,
 			expectedCluster:  "ocpv05",
 			expectedScore:    82.5,
 			expectedEligible: true,
@@ -96,7 +96,7 @@ func TestScoredCandidate_UnmarshalJSON(t *testing.T) {
 		},
 		{
 			name:             "ineligible candidate with reason",
-			input:            `{"cluster_name":"ocpv06","score":0,"eligible":false,"ineligibility_reason":"cluster in maintenance"}`,
+			input:            `{"name":"ocpv06","score":0,"eligible":false,"ineligibility_reason":"cluster in maintenance"}`,
 			expectedCluster:  "ocpv06",
 			expectedScore:    0,
 			expectedEligible: false,
@@ -110,8 +110,8 @@ func TestScoredCandidate_UnmarshalJSON(t *testing.T) {
 			if err := json.Unmarshal([]byte(tc.input), &sc); err != nil {
 				t.Fatalf("json.Unmarshal() error: %v", err)
 			}
-			if sc.ClusterName != tc.expectedCluster {
-				t.Errorf("ClusterName = %q, want %q", sc.ClusterName, tc.expectedCluster)
+			if sc.Name != tc.expectedCluster {
+				t.Errorf("Name = %q, want %q", sc.Name, tc.expectedCluster)
 			}
 			if sc.Score != tc.expectedScore {
 				t.Errorf("Score = %v, want %v", sc.Score, tc.expectedScore)
@@ -129,14 +129,33 @@ func TestScoredCandidate_UnmarshalJSON(t *testing.T) {
 	}
 }
 
+func TestScoredCandidate_UnmarshalJSON_WithScores(t *testing.T) {
+	input := `{"name":"ocpv05","score":82.5,"scores":{"cpu":90.0,"memory":75.0,"vm_density":80.0},"eligible":true}`
+	var sc ScoredCandidate
+	if err := json.Unmarshal([]byte(input), &sc); err != nil {
+		t.Fatalf("json.Unmarshal() error: %v", err)
+	}
+	if len(sc.Scores) != 3 {
+		t.Fatalf("len(Scores) = %d, want 3", len(sc.Scores))
+	}
+	expected := map[string]float64{"cpu": 90.0, "memory": 75.0, "vm_density": 80.0}
+	for dim, want := range expected {
+		if got, ok := sc.Scores[dim]; !ok {
+			t.Errorf("Scores missing key %q", dim)
+		} else if got != want {
+			t.Errorf("Scores[%q] = %v, want %v", dim, got, want)
+		}
+	}
+}
+
 func TestEvaluateResponse_UnmarshalJSON(t *testing.T) {
 	input := `{
 		"ranked": [
-			{"cluster_name": "ocpv06", "handle_name": "def34", "score": 82.5, "eligible": true},
-			{"cluster_name": "ocpv05", "handle_name": "abc12", "score": 65.3, "eligible": true}
+			{"name": "ocpv06", "handle_name": "def34", "score": 82.5, "eligible": true},
+			{"name": "ocpv05", "handle_name": "abc12", "score": 65.3, "eligible": true}
 		],
 		"excluded": [
-			{"cluster_name": "ocpv07", "score": 0, "eligible": false, "ineligibility_reason": "disabled"}
+			{"name": "ocpv07", "score": 0, "eligible": false, "ineligibility_reason": "disabled"}
 		],
 		"strategy": "most_capacity",
 		"generated_at": "2026-04-26T14:30:00Z"
@@ -162,8 +181,8 @@ func TestEvaluateResponse_UnmarshalJSON(t *testing.T) {
 		t.Errorf("GeneratedAt = %v, want %v", resp.GeneratedAt, expectedTime)
 	}
 
-	if resp.Ranked[0].ClusterName != "ocpv06" {
-		t.Errorf("Ranked[0].ClusterName = %q, want %q", resp.Ranked[0].ClusterName, "ocpv06")
+	if resp.Ranked[0].Name != "ocpv06" {
+		t.Errorf("Ranked[0].Name = %q, want %q", resp.Ranked[0].Name, "ocpv06")
 	}
 	if resp.Ranked[0].Score != 82.5 {
 		t.Errorf("Ranked[0].Score = %v, want %v", resp.Ranked[0].Score, 82.5)
@@ -177,16 +196,17 @@ func TestEvaluateResponse_RoundTrip(t *testing.T) {
 	original := EvaluateResponse{
 		Ranked: []ScoredCandidate{
 			{
-				ClusterName:     "ocpv05",
+				Name:            "ocpv05",
 				HandleName:      stringPtr("abc12"),
 				HandleNamespace: stringPtr("sandbox-abc12"),
 				Score:           75.0,
+				Scores:          map[string]float64{"cpu": 90.0, "memory": 60.0},
 				Eligible:        true,
 			},
 		},
 		Excluded: []ScoredCandidate{
 			{
-				ClusterName:         "ocpv08",
+				Name:                "ocpv08",
 				Score:               0,
 				Eligible:            false,
 				IneligibilityReason: stringPtr("cooldown"),
@@ -209,11 +229,17 @@ func TestEvaluateResponse_RoundTrip(t *testing.T) {
 	if len(decoded.Ranked) != len(original.Ranked) {
 		t.Fatalf("Ranked length = %d, want %d", len(decoded.Ranked), len(original.Ranked))
 	}
-	if decoded.Ranked[0].ClusterName != original.Ranked[0].ClusterName {
-		t.Errorf("Ranked[0].ClusterName = %q, want %q", decoded.Ranked[0].ClusterName, original.Ranked[0].ClusterName)
+	if decoded.Ranked[0].Name != original.Ranked[0].Name {
+		t.Errorf("Ranked[0].Name = %q, want %q", decoded.Ranked[0].Name, original.Ranked[0].Name)
 	}
 	if decoded.Ranked[0].Score != original.Ranked[0].Score {
 		t.Errorf("Ranked[0].Score = %v, want %v", decoded.Ranked[0].Score, original.Ranked[0].Score)
+	}
+	if len(decoded.Ranked[0].Scores) != 2 {
+		t.Fatalf("Ranked[0].Scores length = %d, want 2", len(decoded.Ranked[0].Scores))
+	}
+	if decoded.Ranked[0].Scores["cpu"] != 90.0 {
+		t.Errorf("Ranked[0].Scores[cpu] = %v, want 90.0", decoded.Ranked[0].Scores["cpu"])
 	}
 	if decoded.Strategy != original.Strategy {
 		t.Errorf("Strategy = %q, want %q", decoded.Strategy, original.Strategy)

@@ -159,9 +159,9 @@ func defaultResponse(clusters ...string) *scheduler.EvaluateResponse {
 	ranked := make([]scheduler.ScoredCandidate, len(clusters))
 	for i, c := range clusters {
 		ranked[i] = scheduler.ScoredCandidate{
-			ClusterName: c,
-			Score:       80 - float64(i)*10,
-			Eligible:    true,
+			Name:     c,
+			Score:    80 - float64(i)*10,
+			Eligible: true,
 		}
 	}
 	return &scheduler.EvaluateResponse{
@@ -333,8 +333,8 @@ func TestReconcile_SingleUnboundHandle(t *testing.T) {
 	if len(scorer.received) != 1 {
 		t.Errorf("expected 1 candidate, got %d", len(scorer.received))
 	}
-	if scorer.received[0].ClusterName != "ocpv06" {
-		t.Errorf("expected cluster ocpv06, got %s", scorer.received[0].ClusterName)
+	if scorer.received[0].Name != "ocpv06" {
+		t.Errorf("expected cluster ocpv06, got %s", scorer.received[0].Name)
 	}
 
 	// Verify score was patched
@@ -380,9 +380,9 @@ func TestReconcile_MultiHandleMultiCluster(t *testing.T) {
 	scorer := &mockScorer{
 		response: &scheduler.EvaluateResponse{
 			Ranked: []scheduler.ScoredCandidate{
-				{ClusterName: "ocpv06", Score: 73.69, Eligible: true},
-				{ClusterName: "ocpv05", Score: 65.58, Eligible: true},
-				{ClusterName: "ocpv10", Score: 34.44, Eligible: true},
+				{Name: "ocpv06", Score: 73.69, Eligible: true},
+				{Name: "ocpv05", Score: 65.58, Eligible: true},
+				{Name: "ocpv10", Score: 34.44, Eligible: true},
 			},
 			Strategy:    "most_capacity",
 			GeneratedAt: time.Now(),
@@ -983,9 +983,9 @@ func TestDeduplicateClusters(t *testing.T) {
 func TestBuildScoreMap(t *testing.T) {
 	resp := &scheduler.EvaluateResponse{
 		Ranked: []scheduler.ScoredCandidate{
-			{ClusterName: "ocpv06", Score: 73.69},
-			{ClusterName: "ocpv05", Score: 65.58},
-			{ClusterName: "ocpv10", Score: 34.44},
+			{Name: "ocpv06", Score: 73.69},
+			{Name: "ocpv05", Score: 65.58},
+			{Name: "ocpv10", Score: 34.44},
 		},
 	}
 	m := buildScoreMap(resp)
@@ -1016,7 +1016,7 @@ func TestBuildExcludedSet(t *testing.T) {
 	reason := "cluster in maintenance"
 	resp := &scheduler.EvaluateResponse{
 		Excluded: []scheduler.ScoredCandidate{
-			{ClusterName: "ocpv10", Eligible: false, IneligibilityReason: &reason},
+			{Name: "ocpv10", Eligible: false, IneligibilityReason: &reason},
 		},
 	}
 	m := buildExcludedSet(resp)
@@ -1053,10 +1053,10 @@ func TestReconcile_ExcludedClusterGetsScoreZero(t *testing.T) {
 	scorer := &mockScorer{
 		response: &scheduler.EvaluateResponse{
 			Ranked: []scheduler.ScoredCandidate{
-				{ClusterName: "ocpv06", Score: 80, Eligible: true},
+				{Name: "ocpv06", Score: 80, Eligible: true},
 			},
 			Excluded: []scheduler.ScoredCandidate{
-				{ClusterName: "ocpv10", Score: 0, Eligible: false, IneligibilityReason: &reason},
+				{Name: "ocpv10", Score: 0, Eligible: false, IneligibilityReason: &reason},
 			},
 			Strategy:    "most_capacity",
 			GeneratedAt: time.Now(),
