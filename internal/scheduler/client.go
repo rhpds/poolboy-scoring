@@ -17,7 +17,7 @@ type Scorer interface {
 	Evaluate(ctx context.Context, candidates []Candidate) (*EvaluateResponse, error)
 }
 
-// Client calls the cluster-scheduler's POST /api/v1/evaluate endpoint.
+// Client calls the cluster-scheduler's POST /api/v1/evaluate/clusters endpoint.
 // It implements the Scorer interface.
 type Client struct {
 	baseURL    string
@@ -45,7 +45,7 @@ func (c *Client) Evaluate(ctx context.Context, candidates []Candidate) (*Evaluat
 		return nil, fmt.Errorf("marshaling evaluate request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/evaluate", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/evaluate/clusters", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}

@@ -45,7 +45,7 @@ The cluster-scheduler's `most_capacity` strategy produces **relative** scores �
 │        - provision_data shortcut → extract cluster           │
 │        - GET AnarchySubject → extract from job_vars          │
 │  4. Collect unique clusters across all unbound handles       │
-│  5. POST /api/v1/evaluate with ALL clusters as candidates    │
+│  5. POST /api/v1/evaluate/clusters with ALL clusters         │
 │  6. For each handle: look up its cluster's score             │
 │  7. Compare with current spec.preferenceScore                │
 │  8. If changed: PATCH spec.preferenceScore                   │
@@ -136,7 +136,7 @@ All configuration is via environment variables, loaded by [envconfig](https://gi
 | `METRICS_PASSWORD`          | Yes      | --                            | HTTP Basic Auth password for `/metrics`                   |
 | `CLUSTER_DOMAIN`            | No       | `babydev.dev.open.redhat.com` | Babylon cluster FQDN, used as label on Prometheus metrics |
 | `RESYNC_INTERVAL`           | No       | `5m`                          | How often the informer re-lists all ResourcePools         |
-| `SCORE_TIMEOUT`             | No       | `5s`                          | HTTP timeout for the `/evaluate` API call                 |
+| `SCORE_TIMEOUT`             | No       | `5s`                          | HTTP timeout for the `/evaluate/clusters` API call        |
 | `RETRY_INTERVAL`            | No       | `30s`                         | Delay before retrying a failed reconciliation             |
 | `LEADER_ELECTION`           | No       | `true`                        | Enable leader election (use `false` for local dev)        |
 | `LEADER_ELECTION_ID`        | No       | `poolboy-scoring`             | Name of the Lease used for leader election                |

@@ -114,16 +114,16 @@ All env vars defined in `internal/config/config.go`:
 | `DRY_RUN`                   | No       | `false`                       | Log score changes without patching           |
 | `DEBUG`                     | No       | `false`                       | Enable V(1) debug logging                    |
 
-## API contract — POST /api/v1/evaluate
+## API contract — POST /api/v1/evaluate/clusters
 
 Request:
 
 ```json
 {
   "candidates": [
-    { "cluster_name": "ocpv05" },
-    { "cluster_name": "ocpv06" },
-    { "cluster_name": "ocpv10" }
+    { "name": "ocpv05" },
+    { "name": "ocpv06" },
+    { "name": "ocpv10" }
   ]
 }
 ```
@@ -133,9 +133,9 @@ Response:
 ```json
 {
   "ranked": [
-    { "cluster_name": "ocpv06", "score": 73.69, "eligible": true },
-    { "cluster_name": "ocpv05", "score": 65.58, "eligible": true },
-    { "cluster_name": "ocpv10", "score": 34.44, "eligible": true }
+    { "name": "ocpv06", "score": 73.69, "scores": {"cpu": 90.0, "memory": 75.0}, "eligible": true },
+    { "name": "ocpv05", "score": 65.58, "scores": {"cpu": 70.0, "memory": 60.0}, "eligible": true },
+    { "name": "ocpv10", "score": 34.44, "scores": {"cpu": 40.0, "memory": 30.0}, "eligible": true }
   ],
   "excluded": [],
   "strategy": "most_capacity",

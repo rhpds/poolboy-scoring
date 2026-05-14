@@ -76,7 +76,7 @@ export DRY_RUN=true
 make run
 ```
 
-The controller connects to the cluster via your current KUBECONFIG context, watches all ResourcePool objects, resolves placements via AnarchySubjects, and calls the cluster-scheduler's `/evaluate` endpoint. Press `Ctrl+C` to stop.
+The controller connects to the cluster via your current KUBECONFIG context, watches all ResourcePool objects, resolves placements via AnarchySubjects, and calls the cluster-scheduler's `/evaluate/clusters` endpoint. Press `Ctrl+C` to stop.
 
 ### All Environment Variables
 
@@ -89,7 +89,7 @@ The full set of environment variables is defined in `internal/config/config.go`.
 | `METRICS_PASSWORD`          | Yes      | --                            | HTTP Basic Auth password for `/metrics`                   |
 | `CLUSTER_DOMAIN`            | No       | `babydev.dev.open.redhat.com` | Babylon cluster FQDN, used as label on Prometheus metrics |
 | `RESYNC_INTERVAL`           | No       | `5m`                          | How often the informer re-lists all ResourcePools         |
-| `SCORE_TIMEOUT`             | No       | `5s`                          | HTTP timeout for the `/evaluate` API call                 |
+| `SCORE_TIMEOUT`             | No       | `5s`                          | HTTP timeout for the `/evaluate/clusters` API call        |
 | `RETRY_INTERVAL`            | No       | `30s`                         | Delay before retrying a failed reconciliation             |
 | `LEADER_ELECTION`           | No       | `true`                        | Enable leader election (use `false` for local dev)        |
 | `LEADER_ELECTION_ID`        | No       | `poolboy-scoring`             | Name of the Lease used for leader election                |
@@ -292,7 +292,7 @@ The release workflow (`.github/workflows/release.yml`) validates that `helm/Char
 | `Failed to load config: required key ... missing value` | Missing required environment variable     | Set `CLUSTER_SCHEDULER_URL`, `CLUSTER_SCHEDULER_API_KEY`, and `METRICS_PASSWORD`              |
 | `cluster-scheduler returned 401 Unauthorized`           | Wrong or expired API key                  | Check `CLUSTER_SCHEDULER_API_KEY` value against the cluster-scheduler's Secret                |
 | `cluster-scheduler returned 5xx`                        | Cluster Scheduler service is down         | Controller retries on next resync cycle; check cluster-scheduler pod logs                     |
-| `context deadline exceeded` on /evaluate                | Cluster Scheduler too slow or unreachable | Increase `SCORE_TIMEOUT` (default 5s) or check network connectivity                           |
+| `context deadline exceeded` on /evaluate/clusters       | Cluster Scheduler too slow or unreachable | Increase `SCORE_TIMEOUT` (default 5s) or check network connectivity                           |
 | `failed to acquire lease`                               | Another instance holds the leader lock    | Use `LEADER_ELECTION=false` for local dev, or stop the other instance                         |
 | RBAC errors (cannot list/watch/patch)                   | ClusterRole not applied or missing verbs  | Apply the Helm chart with `deploy=true` (includes RBAC), or check `helm/templates/rbac.yaml`  |
 | Score patches not appearing on handles                  | DRY_RUN is enabled                        | Set `DRY_RUN=false` (default) to apply patches                                                |

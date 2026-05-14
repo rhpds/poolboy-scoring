@@ -14,8 +14,8 @@ func TestEvaluate_Success(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(EvaluateResponse{
 			Ranked: []ScoredCandidate{
-				{ClusterName: "ocpv06", Score: 82.5, Eligible: true},
-				{ClusterName: "ocpv05", Score: 65.3, Eligible: true},
+				{Name: "ocpv06", Score: 82.5, Eligible: true},
+				{Name: "ocpv05", Score: 65.3, Eligible: true},
 			},
 			Excluded:    []ScoredCandidate{},
 			Strategy:    "most_capacity",
@@ -26,8 +26,8 @@ func TestEvaluate_Success(t *testing.T) {
 
 	client := NewClient(server.URL, "test-key", 5*time.Second)
 	resp, err := client.Evaluate(context.Background(), []Candidate{
-		{ClusterName: "ocpv05"},
-		{ClusterName: "ocpv06"},
+		{Name: "ocpv05"},
+		{Name: "ocpv06"},
 	})
 	if err != nil {
 		t.Fatalf("Evaluate() error: %v", err)
@@ -35,8 +35,8 @@ func TestEvaluate_Success(t *testing.T) {
 	if len(resp.Ranked) != 2 {
 		t.Fatalf("len(Ranked) = %d, want 2", len(resp.Ranked))
 	}
-	if resp.Ranked[0].ClusterName != "ocpv06" {
-		t.Errorf("Ranked[0].ClusterName = %q, want %q", resp.Ranked[0].ClusterName, "ocpv06")
+	if resp.Ranked[0].Name != "ocpv06" {
+		t.Errorf("Ranked[0].Name = %q, want %q", resp.Ranked[0].Name, "ocpv06")
 	}
 	if resp.Ranked[0].Score != 82.5 {
 		t.Errorf("Ranked[0].Score = %v, want 82.5", resp.Ranked[0].Score)
@@ -53,7 +53,7 @@ func TestEvaluate_EmptyRanked(t *testing.T) {
 		json.NewEncoder(w).Encode(EvaluateResponse{
 			Ranked: []ScoredCandidate{},
 			Excluded: []ScoredCandidate{
-				{ClusterName: "ocpv05", Score: 0, Eligible: false, IneligibilityReason: &reason},
+				{Name: "ocpv05", Score: 0, Eligible: false, IneligibilityReason: &reason},
 			},
 			Strategy:    "most_capacity",
 			GeneratedAt: time.Date(2026, 4, 30, 10, 0, 0, 0, time.UTC),
@@ -62,7 +62,7 @@ func TestEvaluate_EmptyRanked(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "test-key", 5*time.Second)
-	resp, err := client.Evaluate(context.Background(), []Candidate{{ClusterName: "ocpv05"}})
+	resp, err := client.Evaluate(context.Background(), []Candidate{{Name: "ocpv05"}})
 	if err != nil {
 		t.Fatalf("Evaluate() error: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestEvaluate_Unauthorized(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "bad-key", 5*time.Second)
-	_, err := client.Evaluate(context.Background(), []Candidate{{ClusterName: "ocpv05"}})
+	_, err := client.Evaluate(context.Background(), []Candidate{{Name: "ocpv05"}})
 	if err == nil {
 		t.Fatal("Evaluate() should return error on 401")
 	}
@@ -102,7 +102,7 @@ func TestEvaluate_ServerError(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "test-key", 5*time.Second)
-	_, err := client.Evaluate(context.Background(), []Candidate{{ClusterName: "ocpv05"}})
+	_, err := client.Evaluate(context.Background(), []Candidate{{Name: "ocpv05"}})
 	if err == nil {
 		t.Fatal("Evaluate() should return error on 500")
 	}
@@ -116,7 +116,7 @@ func TestEvaluate_InvalidResponseBody(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "test-key", 5*time.Second)
-	_, err := client.Evaluate(context.Background(), []Candidate{{ClusterName: "ocpv05"}})
+	_, err := client.Evaluate(context.Background(), []Candidate{{Name: "ocpv05"}})
 	if err == nil {
 		t.Fatal("Evaluate() should return error on invalid JSON")
 	}
@@ -138,7 +138,7 @@ func TestEvaluate_Timeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, err := client.Evaluate(ctx, []Candidate{{ClusterName: "ocpv05"}})
+	_, err := client.Evaluate(ctx, []Candidate{{Name: "ocpv05"}})
 	if err == nil {
 		t.Fatal("Evaluate() should return error on timeout")
 	}
@@ -147,7 +147,7 @@ func TestEvaluate_Timeout(t *testing.T) {
 func TestEvaluate_ConnectionRefused(t *testing.T) {
 	// Point to a port that nothing listens on
 	client := NewClient("http://127.0.0.1:1", "test-key", 1*time.Second)
-	_, err := client.Evaluate(context.Background(), []Candidate{{ClusterName: "ocpv05"}})
+	_, err := client.Evaluate(context.Background(), []Candidate{{Name: "ocpv05"}})
 	if err == nil {
 		t.Fatal("Evaluate() should return error when server is unreachable")
 	}
@@ -156,7 +156,7 @@ func TestEvaluate_ConnectionRefused(t *testing.T) {
 func TestEvaluate_InvalidURL(t *testing.T) {
 	// A URL with a control character makes http.NewRequestWithContext fail.
 	client := NewClient("http://\x00invalid", "test-key", 5*time.Second)
-	_, err := client.Evaluate(context.Background(), []Candidate{{ClusterName: "ocpv05"}})
+	_, err := client.Evaluate(context.Background(), []Candidate{{Name: "ocpv05"}})
 	if err == nil {
 		t.Fatal("Evaluate() should return error on invalid URL")
 	}
@@ -174,9 +174,33 @@ func TestEvaluate_TruncatedBody(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "test-key", 5*time.Second)
-	_, err := client.Evaluate(context.Background(), []Candidate{{ClusterName: "ocpv05"}})
+	_, err := client.Evaluate(context.Background(), []Candidate{{Name: "ocpv05"}})
 	if err == nil {
 		t.Fatal("Evaluate() should return error on truncated body")
+	}
+}
+
+func TestEvaluate_EndpointPath(t *testing.T) {
+	var receivedPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(EvaluateResponse{
+			Ranked:      []ScoredCandidate{},
+			Excluded:    []ScoredCandidate{},
+			Strategy:    "most_capacity",
+			GeneratedAt: time.Date(2026, 4, 30, 10, 0, 0, 0, time.UTC),
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-key", 5*time.Second)
+	_, err := client.Evaluate(context.Background(), []Candidate{{Name: "ocpv05"}})
+	if err != nil {
+		t.Fatalf("Evaluate() error: %v", err)
+	}
+	if receivedPath != "/api/v1/evaluate/clusters" {
+		t.Errorf("path = %q, want %q", receivedPath, "/api/v1/evaluate/clusters")
 	}
 }
 
@@ -195,7 +219,7 @@ func TestEvaluate_APIKeyHeader(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "my-secret-key", 5*time.Second)
-	_, err := client.Evaluate(context.Background(), []Candidate{{ClusterName: "ocpv05"}})
+	_, err := client.Evaluate(context.Background(), []Candidate{{Name: "ocpv05"}})
 	if err != nil {
 		t.Fatalf("Evaluate() error: %v", err)
 	}
